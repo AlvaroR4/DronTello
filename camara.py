@@ -3,9 +3,9 @@
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from sensor_msgs.msg import Image
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy # <--- ¡Añadido DurabilityPolicy!from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+from sensor_msgs.msg import Image
 from djitellopy import Tello
 import cv2
 import time
@@ -43,10 +43,12 @@ class TelloImagePublisher(Node):
         time.sleep(1.5) # Pausa para estabilizar
             
         # Crear Publicador ROS
+
         qos_profile_publisher = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
-            depth=1
+            depth=1,
+            durability=DurabilityPolicy.VOLATILE
         )
         self.image_publisher_ = self.create_publisher(Image, ROS_TOPIC_OUTPUT, qos_profile_publisher)
         self.get_logger().info("Publicador ROS creado.")
