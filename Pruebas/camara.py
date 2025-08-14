@@ -11,7 +11,7 @@ import cv2
 import time
 
 TELLO_IP = '192.168.10.1'
-ROS_TOPIC_OUTPUT = '/tello/imagen'
+ROS_TOPIC_OUTPUT = 'camera/image_raw'
 TIMER_PERIOD = 1.0 / 30.0 # Periodo del temporizador en segundos (aprox. 30 FPS)
 
 FRAME_WIDTH_PROC = 640
