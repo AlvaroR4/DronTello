@@ -189,24 +189,36 @@ class NodoLogica(Node):
 
                 if not alineado_x:
                     # Si offset_x_norm < 0 (obj a la izq), dron debe ir a la izq (lr negativo)
+                    # Como los offsets serán valores en torno a 0.x, aplicamos de velocidad ese valor x100
+                    # Después comprobar 100 como velocidad máxima permitida por el tello [-100,100]
+
+                    # *** Hacer pruebas porque igual es necesario incluir una velocidad mínima
+                    lr = offset_x_norm * 100
+                    if lr > 100: 
+                        lr = 100
+                    elif lr < 100:
+                        lr = -100
+                    
+                    """
                     neg = offset_x_norm < 0
                     offset_x_norm = abs(offset_x_norm)
                     
                     if offset_x_norm <= 1 and offset_x_norm > 0.8:
-                    	lr = VELOCIDAD_LATERAL_TELLO *5
+                        lr = VELOCIDAD_LATERAL_TELLO *5
                     elif offset_x_norm <= 0.8 and offset_x_norm > 0.6:
                         lr = VELOCIDAD_LATERAL_TELLO *4
                     elif offset_x_norm <= 0.6 and offset_x_norm > 0.4:
                         lr = VELOCIDAD_LATERAL_TELLO *3
                     elif offset_x_norm <= 0.4 and offset_x_norm > 0.2:
                         lr = VELOCIDAD_LATERAL_TELLO *2
-                    elif offset_x_norm <= 0.2and offset_x_norm > 0:
+                    elif offset_x_norm <= 0.2 and offset_x_norm > 0:
                         lr = VELOCIDAD_LATERAL_TELLO *1
                     else:
                         lr = VELOCIDAD_LATERAL_TELLO
                     
-                    lr = -VELOCIDAD_LATERAL_TELLO if neg else VELOCIDAD_LATERAL_TELLO
-                    
+                    if neg: 
+                        lr = -lr 
+                    """
                         
                     #lr = -VELOCIDAD_LATERAL_TELLO if offset_x_norm < 0 else VELOCIDAD_LATERAL_TELLO
                         
@@ -216,25 +228,36 @@ class NodoLogica(Node):
                     # Si offset_y_norm < 0 (obj arriba en imagen), dron debe subir (ud pos)
                     # Si offset_y_norm > 0 (obj abajo en imagen), dron debe bajar (ud neg)
                     
+                    
+                    
+
+                    ud = offset_y_norm * 100
+                    if ud < -100:
+                        ud = -100
+                    elif ud > 100:
+                        ud = 100
+                    """
                     neg = offset_y_norm < 0
                     offset_y_norm = abs(offset_y_norm)
-                    
+
                     if offset_y_norm <= 1 and offset_y_norm > 0.8:
-                    	ud = VELOCIDAD_VERTICAL_TELLO *5
+                        ud = VELOCIDAD_VERTICAL_TELLO *5
                     elif offset_y_norm <= 0.8 and offset_y_norm > 0.6:
                         ud = VELOCIDAD_VERTICAL_TELLO *4
                     elif offset_y_norm <= 0.6 and offset_y_norm > 0.4:
                         ud = VELOCIDAD_VERTICAL_TELLO *3
                     elif offset_y_norm <= 0.4 and offset_y_norm > 0.2:
                         ud = VELOCIDAD_VERTICAL_TELLO *2
-                    elif offset_y_norm <= 0.2and offset_y_norm > 0:
+                    elif offset_y_norm <= 0.2 and offset_y_norm > 0:
                         ud = VELOCIDAD_VERTICAL_TELLO *1
                     else:
-                        lr = VELOCIDAD_VERTICAL_TELLO
+                        ud = VELOCIDAD_VERTICAL_TELLO
                     
-                    ud = -VELOCIDAD_VERTICAL_TELLO if neg else VELOCIDAD_VERTICAL_TELLO
+                    if neg: 
+                        ud = -ud
                     
                     #ud = VELOCIDAD_VERTICAL_TELLO if offset_y_norm < 0 else -VELOCIDAD_VERTICAL_TELLO
+                    """
                 
                 self.get_logger().info(f"Alineando: dx={offset_x_norm:.2f} (lr={lr}), dy={offset_y_norm:.2f} (ud={ud}), Dist={distancia_m:.2f}m", throttle_duration_sec=0.5)
 
