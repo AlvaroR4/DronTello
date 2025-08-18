@@ -13,7 +13,7 @@ import traceback
 
 # --- Constantes ---
 TELLO_IP = '192.168.10.1'
-ROS_TOPIC_IMAGEN_RAW = '/tello/imagen_raw'
+ROS_TOPIC_IMAGEN_RAW = '/tello/imagen'
 ROS_TOPIC_COMANDOS_VELOCIDAD = '/tello/comandos_velocidad'
 TIMER_PERIODO_CAMARA = 1.0 / 30.0  # ~30 FPS para la cámara
 FRAME_TIMEOUT_NONE_MAX = 150 # Frames None antes de considerar error grave
@@ -42,7 +42,7 @@ class NodoCamaraTello(Node):
             self.get_logger().info(f"Conectado. Batería: {self.tello.get_battery()}%")
 
             if self.tello.get_battery() < 5:
-                self.get_logger().error("¡¡¡BATERÍA BAJA!!! No se despegará. Cancela y carga la batería.")
+                self.get_logger().error("¡¡¡BATERÍA BAJA!!! No se despegará.")
                 return 
 
             self.get_logger().info("Iniciando stream de vídeo...")
@@ -55,8 +55,8 @@ class NodoCamaraTello(Node):
                 raise RuntimeError("frame_reader es None después de streamon().")
             self.get_logger().info("Stream activado y frame_reader obtenido.")
             time.sleep(1.0) 
-            self.get_logger().info("¡DESPEGANDO! Mantén el área despejada.")
-            self.tello.takeoff() 
+            self.get_logger().info("¡DESPEGANDO.")
+            #self.tello.takeoff() 
             self.get_logger().info("Despegue")
             self.despegue_realizado = True 
             time.sleep(2) 

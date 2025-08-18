@@ -11,7 +11,7 @@ import threading
 from pynput import keyboard 
 
 TELLO_IP = '192.168.10.1'
-ROS_TOPIC_IMAGEN_RAW = '/tello/imagen_raw'
+ROS_TOPIC_IMAGEN_RAW = '/tello/imagen'
 ROS_TOPIC_COMANDOS_VELOCIDAD = '/tello/comandos_velocidad'
 TIMER_PERIODO_CAMARA = 1.0 / 30.0    # ~30 FPS para la cámara
 
@@ -34,7 +34,7 @@ class NodoTello(Node):
         time.sleep(1.0) 
 
         self.get_logger().info("Despegando Tello")
-        self.tello.takeoff()
+        #self.tello.takeoff()
         time.sleep(2) 
 
         # Publicador para la imagen RAW

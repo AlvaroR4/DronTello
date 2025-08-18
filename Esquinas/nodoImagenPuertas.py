@@ -19,11 +19,14 @@ FRAME_HEIGHT_PROC = 480
 
 # Rangos HSV para el color azul (para las esquinas de la puerta)
 # Estos rangos pueden necesitar ajuste según las condiciones de iluminación.
-COLOR_LOWER_BLUE = np.array([100, 150, 50])  # Tono, Saturación, Valor (mínimos)
-COLOR_UPPER_BLUE = np.array([140, 255, 255]) # Tono, Saturación, Valor (máximos)
+COLOR_LOWER_BLUE = np.array([24, 169, 139])  # Tono, Saturación, Valor (mínimos)
+COLOR_UPPER_BLUE = np.array([33, 255, 255]) # Tono, Saturación, Valor (máximos)
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
+
+ALTO_REAL = 0.36
+ANCHO_REAL = 0.23
 
 class ModuloLocalizacion(Node):
     """
@@ -93,9 +96,9 @@ class ModuloLocalizacion(Node):
         try:
             # Redimensionar el frame para un procesamiento más rápido
             img_procesamiento = cv2.resize(frame_bgr_raw, (FRAME_WIDTH_PROC, FRAME_HEIGHT_PROC))
-            
+            img_proc = cv2.cvtColor(img_procesamiento, cv2.COLOR_BGR2RGB)
             # Convertir a HSV para la segmentación de color
-            img_hsv = cv2.cvtColor(img_procesamiento, cv2.COLOR_BGR2HSV)
+            img_hsv = cv2.cvtColor(img_proc, cv2.COLOR_BGR2HSV)
 
             # Llamar al algoritmo de detección de puertas
             puertas_detectadas, img_con_dibujos = self.algoritmoDetectarPuertas(img_hsv, img_procesamiento.copy())
@@ -113,7 +116,8 @@ class ModuloLocalizacion(Node):
 
             # Publicar la imagen con las visualizaciones
             try:
-                ros_image_msg_out = self.bridge.cv2_to_imgmsg(img_con_dibujos, encoding="bgr8")
+                img_publish_rgb = cv2.cvtColor(img_con_dibujos, cv2.COLOR_BGR2RGB)
+                ros_image_msg_out = self.bridge.cv2_to_imgmsg(img_publish_rgb, encoding="bgr8")
                 ros_image_msg_out.header.stamp = msg_imagen_ros.header.stamp
                 ros_image_msg_out.header.frame_id = "tello_camera_processed_localization"
                 self.publicador_imagen_visualizacion.publish(ros_image_msg_out)
@@ -129,7 +133,7 @@ class ModuloLocalizacion(Node):
     def algoritmoDetectarPuertas(self, img_hsv, img_visualizacion):
         """
         Algoritmo principal para la detección de puertas.
-        1. Detecta los puntos de las esquinas (en esta versión, azules).
+        1. Detecta los puntos de las esquinas.
         2. Agrupa esos puntos para formar puertas.
         
         Args:
@@ -145,7 +149,7 @@ class ModuloLocalizacion(Node):
         # --- Fase 1: Detección de puntos individuales de las esquinas ---
         puntos_esquinas_detectados = [] # Lista de tuplas (cx, cy)
 
-        # 1. Segmentar las esquinas azules
+        # 1. Segmentar las esquinas 
         mask_azul = cv2.inRange(img_hsv, COLOR_LOWER_BLUE, COLOR_UPPER_BLUE)
 
         # Opcional: Operaciones morfológicas para limpiar la máscara (abrir y cerrar)
@@ -172,7 +176,7 @@ class ModuloLocalizacion(Node):
                     cv2.putText(img_visualizacion, f"({cx},{cy})", (cx + 10, cy + 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1, cv2.LINE_AA)
 
-        self.get_logger().info(f"Esquinas azules detectadas: {len(puntos_esquinas_detectados)}")
+        self.get_logger().info(f"Esquinas detectadas: {len(puntos_esquinas_detectados)}")
 
         # --- Fase 2: Agrupación de puntos para formar puertas ---
         puertas_encontradas = self.agruparPuntosEnPuertas(puntos_esquinas_detectados, img_visualizacion)
@@ -199,6 +203,25 @@ class ModuloLocalizacion(Node):
         if len(puntos_esquinas) >= 4:
             # Para una puerta sin rotación, simplemente encontramos el cuadro delimitador
             # de todos los puntos de las esquinas.
+
+            x_sorted = sorted(puntos_esquinas, key=lambda p: p[0])
+            y_sorted = sorted(puntos_esquinas, key=lambda p: p[1])
+
+            x_menor = x_sorted[0]
+            x_menor2 = x_sorted[1]
+            # Cuanto mayor es la y mas bajo esta en la imagen
+            y_menor = y_sorted[2]
+            y_menor2 = y_sorted[3]
+
+            ancho_puerta = y_menor2[0] - y_menor[0]
+            alto_puerta = x_menor2[1] - x_menor[1]
+
+            proporcion = ancho_puerta / alto_puerta
+            proporcion_real = ANCHO_REAL / ALTO_REAL
+
+            angulo = 90*proporcion/proporcion_real
+
+
             x_coords = [p[0] for p in puntos_esquinas]
             y_coords = [p[1] for p in puntos_esquinas]
 
@@ -210,20 +233,24 @@ class ModuloLocalizacion(Node):
             x_centro_puerta = x_min + ancho_puerta // 2
             y_centro_puerta = y_min + alto_puerta // 2
 
-            # Pequeño umbral para evitar detecciones minúsculas por ruido
-            if ancho_puerta > 50 and alto_puerta > 50: 
-                puerta_detectada = {
-                    'x_centro': x_centro_puerta,
-                    'y_centro': y_centro_puerta,
-                    'ancho': ancho_puerta,
-                    'alto': alto_puerta
-                }
-                puertas.append(puerta_detectada)
+            sup_izq = (x_min, y_min)
+            sup_dcha = (x_max, y_min)
+            inf_izq = (x_min, y_max)
+            inf_dcha = (x_max, y_max)
 
-                # Dibujar el rectángulo de la puerta y su centro en la imagen de visualización
-                cv2.rectangle(img_visualizacion, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2) # Verde
-                cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 5, (0, 0, 255), -1) # Rojo (centro)
-                cv2.putText(img_visualizacion, f"Puerta ({x_centro_puerta},{y_centro_puerta})",
+
+            puerta_detectada = {
+                'x_centro': x_centro_puerta,
+                'y_centro': y_centro_puerta,
+                'ancho': ancho_puerta,
+                'alto': alto_puerta
+            }
+            puertas.append(puerta_detectada)
+
+            # Dibujar el rectángulo de la puerta y su centro en la imagen de visualización
+            cv2.rectangle(img_visualizacion, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2) # Verde
+            cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 5, (0, 0, 255), -1) # Rojo (centro)
+            cv2.putText(img_visualizacion, f"Puerta ({x_centro_puerta},{y_centro_puerta},{angulo})",
                             (x_centro_puerta - 50, y_centro_puerta - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2, cv2.LINE_AA)
         
