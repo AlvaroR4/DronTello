@@ -23,7 +23,6 @@ class NodoTello(Node):
         self.bridge = CvBridge()
         self.tello = Tello(host=TELLO_IP)
         self.frame_reader = None 
-        self.parada_emergencia_activa = False
 
         self.get_logger().info("Conectando al Tello ")
         self.tello.connect()
@@ -70,14 +69,8 @@ class NodoTello(Node):
         self.tello.send_rc_control(lr, fb, ud, yv)
 
     def timer_callback_camara(self):
-        if self.parada_emergencia_activa:
-            return
 
         frame_bgr = self.frame_reader.frame # Obtenemos el frame
-
-        if frame_bgr is None:
-            self.get_logger().warn("Frame de la cámara es None.", throttle_duration_sec=2.0)
-            return
 
         # Publicar el frame
         ros_image_msg = self.bridge.cv2_to_imgmsg(frame_bgr, encoding="bgr8")
@@ -93,11 +86,9 @@ class NodoTello(Node):
         self.tello.send_rc_control(0, 0, 0, 0)
         time.sleep(0.1)
 
-        # Si no hubo una emergencia activa, intentar aterrizar.
-        if not self.parada_emergencia_activa:
-            self.get_logger().info("Aterrizando el Tello...")
-            self.tello.land()
-            time.sleep(5)
+        self.get_logger().info("Aterrizando el Tello...")
+        self.tello.land()
+        time.sleep(5)
 
         self.get_logger().info("Deteniendo stream de vídeo del Tello...")
         self.tello.streamoff()
@@ -119,9 +110,8 @@ def main(args=None):
     try:
         rclpy.spin(nodo_tello)
     except KeyboardInterrupt:
-        nodo_tello.parada_emergencia_activa = True
-        nodo_tello.tello.land()
-        nodo_tello.get_logger().info("Ctrl+C detectado. Iniciando cierre del nodo.")
+        nodo_tello.tello.emergency()
+        nodo_tello.get_logger().info("Emergencia.")
     finally:
         nodo_tello.destroy_node()
         rclpy.shutdown()
