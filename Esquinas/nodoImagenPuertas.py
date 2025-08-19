@@ -205,39 +205,46 @@ class ModuloLocalizacion(Node):
             # de todos los puntos de las esquinas.
 
             x_sorted = sorted(puntos_esquinas, key=lambda p: p[0])
-            y_sorted = sorted(puntos_esquinas, key=lambda p: p[1])
+            #y_sorted = sorted(puntos_esquinas, key=lambda p: p[1])
 
             x_menor = x_sorted[0]
             x_menor2 = x_sorted[1]
-            # Cuanto mayor es la y mas bajo esta en la imagen
-            y_menor = y_sorted[2]
-            y_menor2 = y_sorted[3]
+            x_menor3 = x_sorted[2]
+            x_menor4 = x_sorted[3]
 
-            ancho_puerta = y_menor2[0] - y_menor[0]
-            alto_puerta = x_menor2[1] - x_menor[1]
+            # Cuanto mayor es la y mas bajo esta en la imagen
+            #y_menor = y_sorted[0]
+            #y_menor2 = y_sorted[1]
+            #y_menor3 = y_sorted[2]
+            #y_menor4 = y_sorted[3]
+            
+            # esq4   esq3
+            # esq1   esq2
+
+            if (x_menor[1] < x_menor2[1]):
+                esq1 = x_menor
+                esq4 = x_menor2
+            else:
+                esq1 = x_menor2
+                esq4 = x_menor
+
+            if (x_menor3[1] < x_menor4[1]):
+                esq2 = x_menor3
+                esq3 = x_menor4
+            else:
+                esq2 = x_menor4
+                esq3 = x_menor3
+
+            ancho_puerta = esq1[0] - esq2[0]
+            alto_puerta = esq4[1] - esq1[1]
 
             proporcion = ancho_puerta / alto_puerta
             proporcion_real = ANCHO_REAL / ALTO_REAL
 
             angulo = 90*proporcion/proporcion_real
 
-
-            x_coords = [p[0] for p in puntos_esquinas]
-            y_coords = [p[1] for p in puntos_esquinas]
-
-            x_min, x_max = min(x_coords), max(x_coords)
-            y_min, y_max = min(y_coords), max(y_coords)
-
-            ancho_puerta = x_max - x_min
-            alto_puerta = y_max - y_min
-            x_centro_puerta = x_min + ancho_puerta // 2
-            y_centro_puerta = y_min + alto_puerta // 2
-
-            sup_izq = (x_min, y_min)
-            sup_dcha = (x_max, y_min)
-            inf_izq = (x_min, y_max)
-            inf_dcha = (x_max, y_max)
-
+            x_centro_puerta = esq1[0] + ancho_puerta // 2
+            y_centro_puerta = esq1[1] + alto_puerta // 2
 
             puerta_detectada = {
                 'x_centro': x_centro_puerta,
@@ -247,8 +254,11 @@ class ModuloLocalizacion(Node):
             }
             puertas.append(puerta_detectada)
 
-            # Dibujar el rectángulo de la puerta y su centro en la imagen de visualización
-            cv2.rectangle(img_visualizacion, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2) # Verde
+            #Dibujar el rectangulo
+            esquinas = [esq1, esq2, esq3, esq4]
+            puntos = np.array(esquinas, np.int32)
+            puntos = puntos.reshape((-1, 1, 2))
+            cv2.polylines(img_visualizacion, [puntos], True, (0, 255, 0), 2)
             cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 5, (0, 0, 255), -1) # Rojo (centro)
             cv2.putText(img_visualizacion, f"Puerta ({x_centro_puerta},{y_centro_puerta},{angulo})",
                             (x_centro_puerta - 50, y_centro_puerta - 20),
