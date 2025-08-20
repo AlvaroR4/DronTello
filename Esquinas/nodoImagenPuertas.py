@@ -19,14 +19,14 @@ FRAME_HEIGHT_PROC = 480
 
 # Rangos HSV para el color azul (para las esquinas de la puerta)
 # Estos rangos pueden necesitar ajuste según las condiciones de iluminación.
-COLOR_LOWER_BLUE = np.array([24, 169, 139])  # Tono, Saturación, Valor (mínimos)
-COLOR_UPPER_BLUE = np.array([33, 255, 255]) # Tono, Saturación, Valor (máximos)
+COLOR_LOWER_BLUE = np.array([20, 134, 115])  # Tono, Saturación, Valor (mínimos)
+COLOR_UPPER_BLUE = np.array([34, 255, 255]) # Tono, Saturación, Valor (máximos)
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
 
-ALTO_REAL = 0.36
-ANCHO_REAL = 0.23
+ALTO_REAL = 0.18
+ANCHO_REAL = 0.16
 
 class ModuloLocalizacion(Node):
     """
@@ -221,22 +221,22 @@ class ModuloLocalizacion(Node):
             # esq4   esq3
             # esq1   esq2
 
-            if (x_menor[1] < x_menor2[1]):
+            if (x_menor[1] > x_menor2[1]):
                 esq1 = x_menor
                 esq4 = x_menor2
             else:
                 esq1 = x_menor2
                 esq4 = x_menor
 
-            if (x_menor3[1] < x_menor4[1]):
+            if (x_menor3[1] > x_menor4[1]):
                 esq2 = x_menor3
                 esq3 = x_menor4
             else:
                 esq2 = x_menor4
                 esq3 = x_menor3
 
-            ancho_puerta = esq1[0] - esq2[0]
-            alto_puerta = esq4[1] - esq1[1]
+            ancho_puerta = esq2[0] - esq1[0]
+            alto_puerta = esq1[1] - esq4[1]
 
             proporcion = ancho_puerta / alto_puerta
             proporcion_real = ANCHO_REAL / ALTO_REAL
@@ -244,7 +244,7 @@ class ModuloLocalizacion(Node):
             angulo = 90*proporcion/proporcion_real
 
             x_centro_puerta = esq1[0] + ancho_puerta // 2
-            y_centro_puerta = esq1[1] + alto_puerta // 2
+            y_centro_puerta = esq4[1] + alto_puerta // 2
 
             puerta_detectada = {
                 'x_centro': x_centro_puerta,
