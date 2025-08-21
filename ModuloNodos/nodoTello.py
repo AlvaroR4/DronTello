@@ -66,7 +66,8 @@ class NodoTello(Node):
 
     def callback_comandos_velocidad(self, msg):
         lr, fb, ud, yv = int(msg.data[0]), int(msg.data[1]), int(msg.data[2]), int(msg.data[3])
-        self.tello.send_rc_control(lr, fb, ud, yv)
+        #self.tello.send_rc_control(lr, fb, ud, yv)
+        self.tello.send_rc_control(0, 0, 0, 0)
 
     def timer_callback_camara(self):
 
@@ -110,7 +111,7 @@ def main(args=None):
     try:
         rclpy.spin(nodo_tello)
     except KeyboardInterrupt:
-        nodo_tello.tello.emergency()
+        nodo_tello.tello.land()
         nodo_tello.get_logger().info("Emergencia.")
     finally:
         nodo_tello.destroy_node()

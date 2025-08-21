@@ -16,7 +16,7 @@ import threading
 TELLO_IP = '192.168.10.1'
 ROS_TOPIC_OUTPUT = '/tello/camara'
 PUBLISH_TIMER_PERIOD = 1.0 / 30.0 # ~30 FPS para publicar vídeo
-HOVER_DURATION_SEC = 20 # Tiempo en segundos que el dron esperará en el aire
+HOVER_DURATION_SEC = 30 # Tiempo en segundos que el dron esperará en el aire
 
 class TelloFlightPublisher(Node):
     def __init__(self):
@@ -197,6 +197,7 @@ def main(args=None):
              
     except KeyboardInterrupt:
         print("Ctrl+C detectado, iniciando cierre...")
+        Tello.land()
         if node: node.shutdown_requested.set() 
     except SystemExit as e:
         print(f"Saliendo: {e}")
