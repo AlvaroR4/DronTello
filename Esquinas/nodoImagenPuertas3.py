@@ -7,6 +7,7 @@ from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import numpy as np
 import traceback
+import math
 
 # Definición de tópicos ROS2
 ROS_TOPIC_IMAGEN_RAW_INPUT = '/tello/imagen'
@@ -14,8 +15,8 @@ ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
 ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
 
 # Dimensiones de procesamiento de la imagen
-FRAME_WIDTH_PROC = 640
-FRAME_HEIGHT_PROC = 480
+ANCHO_TOTAL = 640
+ALTO_TOTAL = 480
 
 # Rangos HSV para el color azul (para las esquinas de la puerta)
 # Estos rangos pueden necesitar ajuste según las condiciones de iluminación.
@@ -28,8 +29,8 @@ MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la
 ALTO_REAL = 0.18
 ANCHO_REAL = 0.16
 FOCAL = 617.0
-FOV_H = 90.0
-FOV_V = 60.0
+FOV_H = 67.2
+FOV_V = 52.3
 
 class ModuloLocalizacion(Node):
     """
@@ -98,7 +99,7 @@ class ModuloLocalizacion(Node):
 
         try:
             # Redimensionar el frame para un procesamiento más rápido
-            img_procesamiento = cv2.resize(frame_bgr_raw, (FRAME_WIDTH_PROC, FRAME_HEIGHT_PROC))
+            img_procesamiento = cv2.resize(frame_bgr_raw, (ANCHO_TOTAL, ALTO_TOTAL))
             img_proc = cv2.cvtColor(img_procesamiento, cv2.COLOR_BGR2RGB)
             # Convertir a HSV para la segmentación de color
             img_hsv = cv2.cvtColor(img_proc, cv2.COLOR_BGR2HSV)
@@ -266,24 +267,24 @@ class ModuloLocalizacion(Node):
 
             distancia_estimada = self.estimar_distancia(alto_puerta)
 
-            cx = FRAME_WIDTH_PROC / 2
-            cy = FRAME_HEIGHT_PROC / 2
-            pos_z = distancia_estimada
+            fov_horizontal_rad = math.radians(FOV_H)
+            fov_vertical_rad = math.radians(FOV_V)
+            nx = (x_centro_puerta - ANCHO_TOTAL / 2) / (ANCHO_TOTAL / 2)
+            ny = -(y_centro_puerta - ALTO_TOTAL / 2) / (ALTO_TOTAL / 2)
 
-            pos_x = (x_centro_puerta - cx) * pos_z / FOCAL
-            pos_y = (y_centro_puerta - cy) * pos_z / FOCAL
+            angulo_horizontal_rad = nx * (fov_horizontal_rad / 2)
+            angulo_vertical_rad = ny * (fov_vertical_rad / 2)
 
-            posicion_puerta_3d = (pos_x, pos_y, pos_z)
-
-            vector_normal = self.calcular_vector_normal(angulo)
-
-            punto_navegacion = self.calcular_punto_navegacion(posicion_puerta_3d, vector_normal)
+            coordenada_Z = distancia_estimada * math.sin(angulo_vertical_rad)
+            coordenada_Y = distancia_estimada * math.cos(angulo_vertical_rad) * math.sin(angulo_horizontal_rad)
+            coordenada_X = distancia_estimada * math.cos(angulo_vertical_rad) * math.cos(angulo_horizontal_rad)
             
+            distancia_calculada = math.sqrt(coordenada_X**2 + coordenada_Y**2 + coordenada_Z**2)
+
             self.get_logger().info("--- DATOS ---")
             self.get_logger().info(f"Distancia a la puerta: {distancia_estimada:.2f} m")
-            self.get_logger().info(f"Posición 3D de la puerta (X,Y,Z): ({pos_x:.2f}, {pos_y:.2f}, {pos_z:.2f}) m")
-            self.get_logger().info(f"Vector Normal de la puerta (Nx,Ny): ({vector_normal[0]:.2f}, {vector_normal[1]:.2f})")
-            self.get_logger().info(f"Punto Objetivo de Navegación (X,Y,Z): ({punto_navegacion[0]:.2f}, {punto_navegacion[1]:.2f}, {punto_navegacion[2]:.2f}) m")
+            self.get_logger().info(f"Coordenada puerta: {coordenada_X} , {coordenada_Y} , {coordenada_Z} m")
+            self.get_logger().info(f"Verificación: La distancia calculada es {distancia_calculada:.3f} m (debería ser {distancia_estimada} m)")
             self.get_logger().info("-----------------------------")
 
             puerta_detectada = {
