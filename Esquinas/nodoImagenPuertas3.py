@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import traceback
 import math
+from scipy.spatial.transform import Rotation
 
 # Definición de tópicos ROS2
 ROS_TOPIC_IMAGEN_RAW_INPUT = '/tello/imagen'
@@ -20,8 +21,8 @@ ALTO_TOTAL = 480
 
 # Rangos HSV para el color azul (para las esquinas de la puerta)
 # Estos rangos pueden necesitar ajuste según las condiciones de iluminación.
-COLOR_LOWER_BLUE = np.array([0, 197, 68])  # Tono, Saturación, Valor (mínimos)
-COLOR_UPPER_BLUE = np.array([8, 255, 255]) # Tono, Saturación, Valor (máximos)
+COLOR_LOWER_BLUE = np.array([0, 100, 60])  # Tono, Saturación, Valor (mínimos)
+COLOR_UPPER_BLUE = np.array([10, 255, 255]) # Tono, Saturación, Valor (máximos)
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
@@ -192,25 +193,6 @@ class ModuloLocalizacion(Node):
         distancia_mts = (ALTO_REAL * FOCAL) / alto_puerta_px
         return distancia_mts
 
-    def calcular_vector_normal(self, angulo_yaw_grados):
-        #angulo 0 eje X positivo del dron.
-        import math
-        angulo_rad = math.radians(angulo_yaw_grados)
-
-        normal_x = math.cos(angulo_rad)
-        normal_y = math.sin(angulo_rad)
-        
-        return (normal_x, normal_y)
-
-    def calcular_punto_navegacion(self, posicion_puerta_3d, vector_normal):
-        distancia_al_punto_mts = 1.0
-
-        punto_nav_x = posicion_puerta_3d[0] - distancia_al_punto_mts * vector_normal[0]
-        punto_nav_y = posicion_puerta_3d[1] - distancia_al_punto_mts * vector_normal[1]
-        punto_nav_z = posicion_puerta_3d[2]
-
-        return (punto_nav_x, punto_nav_y, punto_nav_z)
-
 
     def agruparPuntosEnPuertas(self, puntos_esquinas, img_visualizacion):
         """
@@ -279,11 +261,18 @@ class ModuloLocalizacion(Node):
             coordenada_Y = distancia_estimada * math.cos(angulo_vertical_rad) * math.sin(angulo_horizontal_rad)
             coordenada_X = distancia_estimada * math.cos(angulo_vertical_rad) * math.cos(angulo_horizontal_rad)
             
+            punto_cuerpo = np.array([coordenada_X, coordenada_Y, coordenada_Z])
+            orientacion_euler_grados = np.array([0, 0, 0])
+
+            rotacion_cuerpo_a_mundo = Rotation.from_euler('zyx', orientacion_euler_grados, degrees=True)
+            punto_mundo = rotacion_cuerpo_a_mundo.apply(punto_cuerpo)
+
             distancia_calculada = math.sqrt(coordenada_X**2 + coordenada_Y**2 + coordenada_Z**2)
 
             self.get_logger().info("--- DATOS ---")
             self.get_logger().info(f"Distancia a la puerta: {distancia_estimada:.2f} m")
             self.get_logger().info(f"Coordenada puerta: {coordenada_X} , {coordenada_Y} , {coordenada_Z} m")
+            self.get_logger().info(f"El punto en Coordenadas Mundo es: {np.round(punto_mundo, 3)}")
             self.get_logger().info(f"Verificación: La distancia calculada es {distancia_calculada:.3f} m (debería ser {distancia_estimada} m)")
             self.get_logger().info("-----------------------------")
 
