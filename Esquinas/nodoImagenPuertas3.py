@@ -257,7 +257,7 @@ class ModuloLocalizacion(Node):
             angulo_horizontal_rad = nx * (fov_horizontal_rad / 2)
             angulo_vertical_rad = ny * (fov_vertical_rad / 2)
 
-            coordenada_Z = distancia_estimada * math.sin(angulo_vertical_rad)
+            coordenada_Z = -distancia_estimada * math.sin(angulo_vertical_rad)
             coordenada_Y = distancia_estimada * math.cos(angulo_vertical_rad) * math.sin(angulo_horizontal_rad)
             coordenada_X = distancia_estimada * math.cos(angulo_vertical_rad) * math.cos(angulo_horizontal_rad)
             
