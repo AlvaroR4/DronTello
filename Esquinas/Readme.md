@@ -19,4 +19,6 @@
 
 -nodoImagenPuertas3: calcula posicion del centro de la puerta en ejes cuerpo
 
--nodoImagenPuertas4: transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo
+-nodoImagenPuertas4: transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo (sin leer de ORB-SLAM3)
+
+-nodoImagenPuertas5: transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo
