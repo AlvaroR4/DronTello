@@ -19,14 +19,14 @@ FRAME_HEIGHT_PROC = 480
 
 # Rangos HSV para el color azul (para las esquinas de la puerta)
 # Estos rangos pueden necesitar ajuste según las condiciones de iluminación.
-COLOR_LOWER_BLUE = np.array([20, 134, 115])  # Tono, Saturación, Valor (mínimos)
-COLOR_UPPER_BLUE = np.array([34, 255, 255]) # Tono, Saturación, Valor (máximos)
+COLOR_LOWER_BLUE = np.array([0, 121, 86])  # Tono, Saturación, Valor (mínimos)
+COLOR_UPPER_BLUE = np.array([9, 255, 255]) # Tono, Saturación, Valor (máximos)
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
 
-ALTO_REAL = 0.18
-ANCHO_REAL = 0.16
+ALTO_REAL = 0.20
+ANCHO_REAL = 0.165
 
 class ModuloLocalizacion(Node):
     """
@@ -172,11 +172,11 @@ class ModuloLocalizacion(Node):
                     puntos_esquinas_detectados.append((cx, cy))
                     
                     # Dibujar las esquinas detectadas en la imagen de visualización
-                    cv2.circle(img_visualizacion, (cx, cy), 7, (255, 0, 0), -1) # Azul
+                    cv2.circle(img_visualizacion, (cx, cy), 3, (0, 0, 0), -1) # Azul
                     cv2.putText(img_visualizacion, f"({cx},{cy})", (cx + 10, cy + 10),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1, cv2.LINE_AA)
 
-        self.get_logger().info(f"Esquinas detectadas: {len(puntos_esquinas_detectados)}")
+        #self.get_logger().info(f"Esquinas detectadas: {len(puntos_esquinas_detectados)}")
 
         # --- Fase 2: Agrupación de puntos para formar puertas ---
         puertas_encontradas = self.agruparPuntosEnPuertas(puntos_esquinas_detectados, img_visualizacion)
@@ -235,13 +235,17 @@ class ModuloLocalizacion(Node):
                 esq2 = x_menor4
                 esq3 = x_menor3
 
-            ancho_puerta = esq2[0] - esq1[0]
-            alto_puerta = esq1[1] - esq4[1]
+            ancho_puerta = abs(esq2[0] - esq1[0])
+            alto_puerta = abs(esq1[1] - esq4[1])
+
+            ancho_puerta2 = abs(esq3[0] - esq4[0])
+            alto_puerta2 = abs(esq2[1] - esq3[1])
 
             proporcion = ancho_puerta / alto_puerta
+            proporcion2 = ancho_puerta2 / alto_puerta2
             proporcion_real = ANCHO_REAL / ALTO_REAL
 
-            angulo = 90*proporcion/proporcion_real
+            angulo = 90 - (90*proporcion/proporcion_real)
 
             x_centro_puerta = esq1[0] + ancho_puerta // 2
             y_centro_puerta = esq4[1] + alto_puerta // 2
@@ -254,13 +258,22 @@ class ModuloLocalizacion(Node):
             }
             puertas.append(puerta_detectada)
 
+            self.get_logger().info("--- DATOS ---")
+            self.get_logger().info(f"Ancho: {ancho_puerta:.2f}")
+            self.get_logger().info(f"Alto: {alto_puerta:.2f}")
+            self.get_logger().info(f"Proporcion: {proporcion:.2f}")
+            self.get_logger().info(f"Ancho2: {ancho_puerta2:.2f}")
+            self.get_logger().info(f"Alto2: {alto_puerta2:.2f}")
+            self.get_logger().info(f"Proporcion2: {proporcion2:.2f}")
+            self.get_logger().info("-----------------------------")
+
             #Dibujar el rectangulo
             esquinas = [esq1, esq2, esq3, esq4]
             puntos = np.array(esquinas, np.int32)
             puntos = puntos.reshape((-1, 1, 2))
-            cv2.polylines(img_visualizacion, [puntos], True, (0, 255, 0), 2)
-            cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 5, (0, 0, 255), -1) # Rojo (centro)
-            cv2.putText(img_visualizacion, f"Puerta ({x_centro_puerta},{y_centro_puerta},{angulo})",
+            #cv2.polylines(img_visualizacion, [puntos], True, (0, 255, 0), 2)
+            cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 4, (0, 255, 0), -1) # Rojo (centro)
+            cv2.putText(img_visualizacion, f"Puerta ({x_centro_puerta},{y_centro_puerta},{angulo:.2f})",
                             (x_centro_puerta - 50, y_centro_puerta - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2, cv2.LINE_AA)
         

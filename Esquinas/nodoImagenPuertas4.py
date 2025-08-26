@@ -308,8 +308,8 @@ class ModuloLocalizacion(Node):
                 esq2 = x_menor4
                 esq3 = x_menor3
 
-            ancho_puerta = esq2[0] - esq1[0]
-            alto_puerta = esq1[1] - esq4[1]
+            ancho_puerta = abs(esq2[0] - esq1[0])
+            alto_puerta = abs(esq1[1] - esq4[1])
 
             #CALCULAR CENTRO, ÁNGULO ,PROPORCIÓN Y DISTANCIA DE LA PUERTA
             proporcion = ancho_puerta / alto_puerta
@@ -368,7 +368,7 @@ class ModuloLocalizacion(Node):
             puntos = puntos.reshape((-1, 1, 2))
             cv2.polylines(img_visualizacion, [puntos], True, (0, 255, 0), 2)
             cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 5, (0, 0, 255), -1) # Rojo (centro)
-            cv2.putText(img_visualizacion, f"Puerta ({x_centro_puerta},{y_centro_puerta},{angulo:.1f})",
+            cv2.putText(img_visualizacion, f"Puerta ({x_centro_puerta},{y_centro_puerta},{angulo})",
                             (x_centro_puerta - 50, y_centro_puerta - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2, cv2.LINE_AA)
         

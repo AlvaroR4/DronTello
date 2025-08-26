@@ -21,8 +21,8 @@ ALTO_TOTAL = 480
 
 # Rangos HSV para el color azul (para las esquinas de la puerta)
 # Estos rangos pueden necesitar ajuste según las condiciones de iluminación.
-COLOR_LOWER_BLUE = np.array([0, 100, 60])  # Tono, Saturación, Valor (mínimos)
-COLOR_UPPER_BLUE = np.array([10, 255, 255]) # Tono, Saturación, Valor (máximos)
+COLOR_LOWER_BLUE = np.array([0, 121, 86])  # Tono, Saturación, Valor (mínimos)
+COLOR_UPPER_BLUE = np.array([9, 255, 255]) # Tono, Saturación, Valor (máximos)
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
