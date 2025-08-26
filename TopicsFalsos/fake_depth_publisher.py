@@ -9,7 +9,7 @@ import cv2 # Necesario para np.full, aunque no para procesar imagen real
 import time
 
 # --- CONFIGURACIÓN ---
-ROS_TOPIC_OUTPUT_DEPTH = '/depth_camera' # Asegúrate que coincida con depth_image_topic_name en el YAML
+ROS_TOPIC_OUTPUT_DEPTH = 'depth_camera' # Asegúrate que coincida con depth_image_topic_name en el YAML
 TIMER_PERIOD_DEPTH = 1.0 / 30.0         # Publicar a 30 Hz
 
 # Estas dimensiones DEBEN COINCIDIR con las de tu imagen RGB del Tello
