@@ -8,10 +8,10 @@ import cv2
 import os 
 
 
-RUTA_IMAGEN_A_PUBLICAR = '/home/alvaro/Desktop/imagen.jpg' 
+RUTA_IMAGEN_A_PUBLICAR = '/home/alvaro/DronTello/TopicsFalsos/imagen.png' 
 
 
-ROS_TOPIC_OUTPUT_IMAGE = '/tello/imagen_raw'
+ROS_TOPIC_OUTPUT_IMAGE = '/tello/imagen'
 TIMER_PERIOD_IMAGE = 1.0 / 30.0         # Publicar a 30 Hz
 
 class FakeImagePublisher(Node):
@@ -20,9 +20,10 @@ class FakeImagePublisher(Node):
         self.get_logger().info("Iniciando nodo de imagen falsa.")
 
         self.bridge = CvBridge()
-        self.imagen_cargada = None
         
+        # Leer la imagen en BGR (por defecto) y pasarla a RGB
         self.imagen_cargada = cv2.imread(RUTA_IMAGEN_A_PUBLICAR)
+        self.imagen_cargada = cv2.cvtColor(self.imagen_cargada, cv2.COLOR_BGR2RGB)
 
         qos_profile_publisher = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT, 
@@ -31,20 +32,13 @@ class FakeImagePublisher(Node):
             durability=DurabilityPolicy.VOLATILE 
         )
         self.image_publisher_ = self.create_publisher(Image, ROS_TOPIC_OUTPUT_IMAGE, qos_profile_publisher)
-
         self.timer = self.create_timer(TIMER_PERIOD_IMAGE, self.timer_callback)
 
     def timer_callback(self):
         ros_image_msg = self.bridge.cv2_to_imgmsg(self.imagen_cargada, encoding="bgr8")
         ros_image_msg.header.stamp = self.get_clock().now().to_msg()
         ros_image_msg.header.frame_id = "tello_camera_link_raw" 
-
         self.image_publisher_.publish(ros_image_msg)
-
-    def destroy_node(self):
-        if self.timer:
-            self.timer.cancel()
-        super().destroy_node()
 
 def main(args=None):
     rclpy.init(args=args)

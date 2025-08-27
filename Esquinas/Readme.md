@@ -21,4 +21,7 @@
 
 -nodoImagenPuertas4: transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo (sin leer de ORB-SLAM3)
 
+-nodoImagenPuertas4R: transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo (sin leer de ORB-SLAM3)
+                      visualización en Rviz, y nueva lógica de alto y ancho
+
 -nodoImagenPuertas5: transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo
