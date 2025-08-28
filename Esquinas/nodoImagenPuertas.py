@@ -7,6 +7,7 @@ from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import numpy as np
 import traceback
+import math
 
 # Definición de tópicos ROS2
 ROS_TOPIC_IMAGEN_RAW_INPUT = '/tello/imagen'
@@ -14,19 +15,18 @@ ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
 ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
 
 # Dimensiones de procesamiento de la imagen
-FRAME_WIDTH_PROC = 640
-FRAME_HEIGHT_PROC = 480
+ANCHO_IMAGEN = 640
+ALTO_IMAGEN = 480
 
-# Rangos HSV para el color azul (para las esquinas de la puerta)
-# Estos rangos pueden necesitar ajuste según las condiciones de iluminación.
-COLOR_LOWER_BLUE = np.array([0, 121, 86])  # Tono, Saturación, Valor (mínimos)
-COLOR_UPPER_BLUE = np.array([9, 255, 255]) # Tono, Saturación, Valor (máximos)
+# Rangos HSV 
+COLOR_MIN = np.array([0, 178, 145])  
+COLOR_MAX = np.array([14, 255, 255])
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
 
-ALTO_REAL = 0.20
-ANCHO_REAL = 0.165
+ALTO_REAL = 0.29
+ANCHO_REAL = 0.20
 
 class ModuloLocalizacion(Node):
     """
@@ -95,7 +95,7 @@ class ModuloLocalizacion(Node):
 
         try:
             # Redimensionar el frame para un procesamiento más rápido
-            img_procesamiento = cv2.resize(frame_bgr_raw, (FRAME_WIDTH_PROC, FRAME_HEIGHT_PROC))
+            img_procesamiento = cv2.resize(frame_bgr_raw, (ANCHO_IMAGEN, ALTO_IMAGEN))
             img_proc = cv2.cvtColor(img_procesamiento, cv2.COLOR_BGR2RGB)
             # Convertir a HSV para la segmentación de color
             img_hsv = cv2.cvtColor(img_proc, cv2.COLOR_BGR2HSV)
@@ -150,7 +150,7 @@ class ModuloLocalizacion(Node):
         puntos_esquinas_detectados = [] # Lista de tuplas (cx, cy)
 
         # 1. Segmentar las esquinas 
-        mask_azul = cv2.inRange(img_hsv, COLOR_LOWER_BLUE, COLOR_UPPER_BLUE)
+        mask_azul = cv2.inRange(img_hsv, COLOR_MIN, COLOR_MAX)
 
         # Opcional: Operaciones morfológicas para limpiar la máscara (abrir y cerrar)
         kernel = np.ones((5,5), np.uint8)
@@ -198,8 +198,10 @@ class ModuloLocalizacion(Node):
         """
         puertas = []
 
-        # Versión Sencilla: Si hay al menos 4 puntos, asumimos que son una única puerta
-        # sin rotación. Esta lógica será la que se mejorará en el futuro.
+        #DECLARAR PARAMETROS QUE PUBLICARÁ EL ORB-SLAM: 
+        roll, pitch, yaw = 10, 5, 30 #datos de rotación(grados) que devolvería orb-slam
+        pos_dron_mundo = [2, 3, 1] #posición del dron que devolvería orb-slam
+
         if len(puntos_esquinas) >= 4:
             # Para una puerta sin rotación, simplemente encontramos el cuadro delimitador
             # de todos los puntos de las esquinas.
@@ -234,21 +236,50 @@ class ModuloLocalizacion(Node):
             else:
                 esq2 = x_menor4
                 esq3 = x_menor3
+            
+            centro_imagen = ANCHO_IMAGEN/2
+            ancho_puerta = math.sqrt((esq2[0] - esq1[0])**2 + (esq2[1] - esq1[1])**2)
+            alto_puerta = math.sqrt((esq1[0] - esq4[0])**2 + (esq1[1] - esq4[1])**2)
+            alto_izq = alto_puerta
+            alto_dcha = math.sqrt((esq2[0] - esq3[0])**2 + (esq2[1] - esq3[1])**2)
 
-            ancho_puerta = abs(esq2[0] - esq1[0])
-            alto_puerta = abs(esq1[1] - esq4[1])
-
-            ancho_puerta2 = abs(esq3[0] - esq4[0])
-            alto_puerta2 = abs(esq2[1] - esq3[1])
+            if ancho_puerta > alto_puerta:
+                x = ancho_puerta
+                ancho_puerta = alto_puerta
+                alto_puerta = x
 
             proporcion = ancho_puerta / alto_puerta
-            proporcion2 = ancho_puerta2 / alto_puerta2
             proporcion_real = ANCHO_REAL / ALTO_REAL
 
-            angulo = 90 - (90*proporcion/proporcion_real)
+            angulo_prop = 90 - (90*proporcion/proporcion_real)
 
             x_centro_puerta = esq1[0] + ancho_puerta // 2
             y_centro_puerta = esq4[1] + alto_puerta // 2
+
+            #caso 1: dron a la derecha y puerta rotada a la derecha
+            if centro_imagen > x_centro_puerta and (alto_izq > alto_dcha):
+                angulo = yaw - angulo_prop
+                caso = 1
+            #caso 2: dron a la derecha y puerta rotada a la izquierda
+            elif centro_imagen > x_centro_puerta and (alto_izq < alto_dcha):
+                angulo = yaw + angulo_prop
+                caso = 2
+            #caso 3: dron a la izquierda y puerta rotada a la izquierda
+            elif centro_imagen < x_centro_puerta and (alto_izq < alto_dcha):
+                angulo = yaw - angulo_prop
+                caso = 3
+            #caso 4: dron a la izquierda y puerta rotada a la derecha
+            elif centro_imagen < x_centro_puerta and (alto_izq > alto_dcha):
+                angulo = yaw + angulo_prop
+                caso = 4
+            else: 
+                angulo = angulo_prop     
+                caso = 0       
+
+
+            x_centro_puerta = int(x_centro_puerta)
+            y_centro_puerta = int(y_centro_puerta)
+
 
             puerta_detectada = {
                 'x_centro': x_centro_puerta,
@@ -262,14 +293,18 @@ class ModuloLocalizacion(Node):
             self.get_logger().info(f"Ancho: {ancho_puerta:.2f}")
             self.get_logger().info(f"Alto: {alto_puerta:.2f}")
             self.get_logger().info(f"Proporcion: {proporcion:.2f}")
-            self.get_logger().info(f"Ancho2: {ancho_puerta2:.2f}")
-            self.get_logger().info(f"Alto2: {alto_puerta2:.2f}")
-            self.get_logger().info(f"Proporcion2: {proporcion2:.2f}")
+            self.get_logger().info(f"Angulo prop: {angulo_prop:.2f}")
+            self.get_logger().info(f"Angulo: {angulo:.2f}")
+            self.get_logger().info(f"Caso: {caso}")
+            self.get_logger().info(f"X-centro: {x_centro_puerta:.2f}")
+            self.get_logger().info(f"x-centro-imagen: {centro_imagen}")
+            self.get_logger().info(f"Alto-izq: {alto_izq:.2f}")
+            self.get_logger().info(f"Alto-dcha: {alto_dcha:.2f}")
             self.get_logger().info("-----------------------------")
 
             #Dibujar el rectangulo
             esquinas = [esq1, esq2, esq3, esq4]
-            puntos = np.array(esquinas, np.int32)
+            puntos = np.array([[int(x), int(y)] for x, y in esquinas], np.int32)
             puntos = puntos.reshape((-1, 1, 2))
             #cv2.polylines(img_visualizacion, [puntos], True, (0, 255, 0), 2)
             cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 4, (0, 255, 0), -1) # Rojo (centro)

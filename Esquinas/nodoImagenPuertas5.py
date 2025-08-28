@@ -9,7 +9,8 @@ import numpy as np
 import traceback
 import math
 from nav_msgs.msg import Odometry
-import tf_transformations 
+from geometry_msgs.msg import PoseStamped, PointStamped
+from transforms3d.euler import quat2euler 
 
 # Definición de tópicos ROS2
 ROS_TOPIC_IMAGEN_RAW_INPUT = '/tello/imagen'
@@ -17,19 +18,27 @@ ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
 ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
 
 # Dimensiones de procesamiento de la imagen
-ANCHO_TOTAL = 640
-ALTO_TOTAL = 480
+ANCHO_IMAGEN = 640
+ALTO_IMAGEN = 480
 
-# Rangos HSV para el color azul (para las esquinas de la puerta)
-# Estos rangos pueden necesitar ajuste según las condiciones de iluminación.
-COLOR_LOWER_BLUE = np.array([0, 100, 60])  # Tono, Saturación, Valor (mínimos)
-COLOR_UPPER_BLUE = np.array([10, 255, 255]) # Tono, Saturación, Valor (máximos)
+# Rangos HSV
+
+#Amarillo
+#COLOR_MIN = np.array([20, 230, 100])  
+#COLOR_MAX = np.array([35, 255, 255])
+#Verde
+#COLOR_MIN = np.array([45, 120, 80])
+#COLOR_MAX = np.array([75, 255, 255])
+#Naranja
+COLOR_MIN = np.array([0, 178, 145])  
+COLOR_MAX = np.array([14, 255, 255])
+
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
 
-ALTO_REAL = 0.18
-ANCHO_REAL = 0.16
+ALTO_REAL = 0.29
+ANCHO_REAL = 0.20
 FOCAL = 617.0
 FOV_H = 67.2
 FOV_V = 52.3
@@ -54,6 +63,8 @@ class ModuloLocalizacion(Node):
         self.coordenada_Z = None
         self.punto_mundo = None
 
+        self.publisher_ = self.create_publisher(PointStamped, '/punto', 10)
+
         # Suscriptor para la imagen RAW
         qos_profile_sub = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -68,19 +79,21 @@ class ModuloLocalizacion(Node):
         )
         self.get_logger().info(f"Suscrito a imagen RAW en: {ROS_TOPIC_IMAGEN_RAW_INPUT}")
 
-        # Suscriptor para la pose del dron publicada por ORB-SLAM (odom)
-        qos_profile_odom = QoSProfile(
+        # Suscriptor al tópico /robot_pose_slam
+        qos_profile_pose = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
             depth=10
         )
-        self.suscripcion_odom = self.create_subscription(
-            Odometry,
-            '/odom',   # tópico publicado por ORB-SLAM
-            self.callback_odom,
-            qos_profile_odom
+
+        self.suscripcion_pose = self.create_subscription(
+            PoseStamped,
+            '/robot_pose_slam',
+            self.callback_pose,
+            qos_profile_pose
         )
-        self.get_logger().info("Suscrito a odometría en: /odom")
+
+        self.get_logger().info("Suscrito a la pose del dron en: /robot_pose_slam")
 
         # Inicializamos variables de pose
         self.pos_dron_mundo = [0.0, 0.0, 0.0]
@@ -111,23 +124,27 @@ class ModuloLocalizacion(Node):
 
 
 
-    def callback_odom(self, msg: Odometry):
+    def callback_pose(self, msg: PoseStamped):
         # Posición
         self.pos_dron_mundo = [
-            msg.pose.pose.position.x,
-            msg.pose.pose.position.y,
-            msg.pose.pose.position.z
+            msg.pose.position.x,
+            msg.pose.position.y,
+            msg.pose.position.z
         ]
 
         # Orientación (cuaternión → euler)
-        q = msg.pose.pose.orientation
-        quaternion = [q.x, q.y, q.z, q.w]
-        (roll, pitch, yaw) = tf_transformations.euler_from_quaternion(quaternion)
+        q = msg.pose.orientation
+        quaternion = [q.w, q.x, q.y, q.z]
+        roll, pitch, yaw = quat2euler(quaternion, axes='sxyz')
         
         # Guardar en grados
         self.roll = np.rad2deg(roll)
         self.pitch = np.rad2deg(pitch)
         self.yaw = np.rad2deg(yaw)
+
+        self.get_logger().info(
+            f"Pose recibida: pos=({self.pos_dron_mundo}), yaw={self.yaw:.2f}°"
+        )
 
     def callback_procesamiento_imagen(self, msg_imagen_ros):
         """
@@ -150,7 +167,7 @@ class ModuloLocalizacion(Node):
 
         try:
             # Redimensionar el frame para un procesamiento más rápido
-            img_procesamiento = cv2.resize(frame_bgr_raw, (ANCHO_TOTAL, ALTO_TOTAL))
+            img_procesamiento = cv2.resize(frame_bgr_raw, (ANCHO_IMAGEN, ALTO_IMAGEN))
             img_proc = cv2.cvtColor(img_procesamiento, cv2.COLOR_BGR2RGB)
             # Convertir a HSV para la segmentación de color
             img_hsv = cv2.cvtColor(img_proc, cv2.COLOR_BGR2HSV)
@@ -184,6 +201,18 @@ class ModuloLocalizacion(Node):
         except Exception as e_processing_callback:
             self.get_logger().error(f"Error general en procesamiento del callback_procesamiento_imagen: {e_processing_callback}")
             self.get_logger().error(traceback.format_exc())
+    
+    def publicar_punto(self, punto_mundo):
+        msg = PointStamped()
+        msg.header.frame_id = 'map'
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.point.x = float(punto_mundo[0])
+        msg.point.y = float(punto_mundo[1])
+        msg.point.z = float(punto_mundo[2])
+
+        self.publisher_.publish(msg)
+        self.get_logger().info(f'Publicado punto: {punto_mundo}')
+
 
     def estimar_distancia(self, alto_puerta_px):
         # Fórmula: Distancia = (Ancho_Real * Longitud_Focal) / Ancho_en_Píxeles
@@ -271,7 +300,7 @@ class ModuloLocalizacion(Node):
         puntos_esquinas_detectados = [] # Lista de tuplas (cx, cy)
 
         # 1. Segmentar las esquinas 
-        mask_azul = cv2.inRange(img_hsv, COLOR_LOWER_BLUE, COLOR_UPPER_BLUE)
+        mask_azul = cv2.inRange(img_hsv, COLOR_MIN, COLOR_MAX)
 
         # Opcional: Operaciones morfológicas para limpiar la máscara (abrir y cerrar)
         kernel = np.ones((5,5), np.uint8)
@@ -321,7 +350,11 @@ class ModuloLocalizacion(Node):
         """
         puertas = []
 
-        # Versión Sencilla: Si hay al menos 4 puntos, asumimos que son una única puerta
+        #RECIBIR DATOS DE ORB-SLAM
+        roll = self.roll
+        pitch = self.pitch
+        yaw = self.yaw
+        pos_dron_mundo = self.pos_dron_mundo
         if len(puntos_esquinas) >= 4:
             
             #ORDENAR ESQUINAS
@@ -349,25 +382,56 @@ class ModuloLocalizacion(Node):
                 esq2 = x_menor4
                 esq3 = x_menor3
 
-            ancho_puerta = esq2[0] - esq1[0]
-            alto_puerta = esq1[1] - esq4[1]
-
             #CALCULAR CENTRO, ÁNGULO ,PROPORCIÓN Y DISTANCIA DE LA PUERTA
+            centro_imagen = ANCHO_IMAGEN/2
+            ancho_puerta = math.sqrt((esq2[0] - esq1[0])**2 + (esq2[1] - esq1[1])**2)
+            alto_puerta = math.sqrt((esq1[0] - esq4[0])**2 + (esq1[1] - esq4[1])**2)
+            alto_izq = alto_puerta
+            alto_dcha = math.sqrt((esq2[0] - esq3[0])**2 + (esq2[1] - esq3[1])**2)
+
+            if ancho_puerta > alto_puerta:
+                x = ancho_puerta
+                ancho_puerta = alto_puerta
+                alto_puerta = x
+
             proporcion = ancho_puerta / alto_puerta
             proporcion_real = ANCHO_REAL / ALTO_REAL
 
-            angulo = 90 -(90*proporcion/proporcion_real)
+            angulo_prop = 90 -(90*proporcion/proporcion_real)
 
             x_centro_puerta = esq1[0] + ancho_puerta // 2
             y_centro_puerta = esq4[1] + alto_puerta // 2
 
             distancia_estimada = self.estimar_distancia(alto_puerta)
 
+            #caso 1: dron a la derecha y puerta rotada a la derecha
+            if centro_imagen > x_centro_puerta and (alto_izq > alto_dcha):
+                angulo = yaw - angulo_prop
+                caso = 1
+            #caso 2: dron a la derecha y puerta rotada a la izquierda
+            elif centro_imagen > x_centro_puerta and (alto_izq < alto_dcha):
+                angulo = yaw + angulo_prop
+                caso = 2
+            #caso 3: dron a la izquierda y puerta rotada a la izquierda
+            elif centro_imagen < x_centro_puerta and (alto_izq < alto_dcha):
+                angulo = yaw - angulo_prop
+                caso = 3
+            #caso 4: dron a la izquierda y puerta rotada a la derecha
+            elif centro_imagen < x_centro_puerta and (alto_izq > alto_dcha):
+                angulo = yaw + angulo_prop
+                caso = 4
+            else: 
+                angulo = angulo_prop     
+                caso = 0       
+
+            x_centro_puerta = int(x_centro_puerta)
+            y_centro_puerta = int(y_centro_puerta)
+
             #MÉTODO PARA CALCULAR LAS COORDENADAS DEL CENTRO DE LA PUERTA EN EJES CUERPO 
             fov_horizontal_rad = math.radians(FOV_H)
             fov_vertical_rad = math.radians(FOV_V)
-            nx = (x_centro_puerta - ANCHO_TOTAL / 2) / (ANCHO_TOTAL / 2)
-            ny = -(y_centro_puerta - ALTO_TOTAL / 2) / (ALTO_TOTAL / 2)
+            nx = (x_centro_puerta - ANCHO_IMAGEN / 2) / (ANCHO_IMAGEN / 2)
+            ny = -(y_centro_puerta - ALTO_IMAGEN / 2) / (ALTO_IMAGEN / 2)
 
             angulo_horizontal_rad = nx * (fov_horizontal_rad / 2)
             angulo_vertical_rad = ny * (fov_vertical_rad / 2)
@@ -379,11 +443,6 @@ class ModuloLocalizacion(Node):
             distancia_calculada = math.sqrt(coordenada_X**2 + coordenada_Y**2 + coordenada_Z**2)
 
             #CONVERTIR EL PUNTO DE EJES CUERPO(DRON) A EJES MUNDO (ORB-SLAM3)
-            roll = self.roll
-            pitch = self.pitch
-            yaw = self.yaw
-            pos_dron_mundo = self.pos_dron_mundo
-            
             punto_cuerpo = [coordenada_X, coordenada_Y, coordenada_Z] #centro de la puerta en ejes mundo
 
             punto_mundo = self.punto_cuerpo_a_mundo(roll, pitch, yaw, pos_dron_mundo, punto_cuerpo)
@@ -405,6 +464,7 @@ class ModuloLocalizacion(Node):
                 'alto': alto_puerta
             }
             puertas.append(puerta_detectada)
+            self.publicar_punto(punto_mundo)
 
             #Dibujar el rectangulo
             esquinas = [esq1, esq2, esq3, esq4]

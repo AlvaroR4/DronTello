@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy 
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32MultiArray
 from cv_bridge import CvBridge
@@ -33,24 +33,27 @@ class NodoTello(Node):
         time.sleep(1.0) 
 
         self.get_logger().info("Despegando Tello")
-        #self.tello.takeoff()
+        # self.tello.takeoff()
         time.sleep(2) 
 
-        # Publicador para la imagen RAW
+        # Publicador para la imagen RAW (⚠️ ahora con QoS RELIABLE)
         qos_profile_img = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
             depth=1
         )
         self.publicador_imagen = self.create_publisher(Image, ROS_TOPIC_IMAGEN_RAW, qos_profile_img)
         self.get_logger().info(f"Publicando imagen RAW en: {ROS_TOPIC_IMAGEN_RAW}")
 
-        # Suscriptor para los comandos de velocidad
+        # Perfil QoS para comandos de velocidad (✅ definido ahora)
         qos_profile_cmd = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
-            depth=10
+            depth=1,
+            durability=DurabilityPolicy.VOLATILE
         )
+
+        # Suscriptor a comandos de velocidad
         self.suscriptor_comandos_velocidad = self.create_subscription(
             Float32MultiArray,
             ROS_TOPIC_COMANDOS_VELOCIDAD,
@@ -62,7 +65,6 @@ class NodoTello(Node):
         # Timer para captura y publicación de imagen
         self.timer_camara = self.create_timer(TIMER_PERIODO_CAMARA, self.timer_callback_camara)
         self.get_logger().info(f"Timer de cámara iniciado ({1.0/TIMER_PERIODO_CAMARA:.1f} FPS).")
-
 
     def callback_comandos_velocidad(self, msg):
         lr, fb, ud, yv = int(msg.data[0]), int(msg.data[1]), int(msg.data[2]), int(msg.data[3])

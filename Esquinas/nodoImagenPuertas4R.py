@@ -27,20 +27,20 @@ ALTO_TOTAL = 480
 # Rangos HSV
 
 #Amarillo
-COLOR_MIN = np.array([20, 230, 100])  
-COLOR_MAX = np.array([35, 255, 255])
+#COLOR_MIN = np.array([20, 230, 100])  
+#COLOR_MAX = np.array([35, 255, 255])
 #Verde
 #COLOR_MIN = np.array([45, 120, 80])
 #COLOR_MAX = np.array([75, 255, 255])
 #Naranja
-#COLOR_MIN = np.array([0, 100, 60])  
-#COLOR_MAX = np.array([10, 255, 255])
+COLOR_MIN = np.array([0, 178, 145])  
+COLOR_MAX = np.array([14, 255, 255])
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
 
-ALTO_REAL = 0.18
-ANCHO_REAL = 0.16
+ALTO_REAL = 0.29
+ANCHO_REAL = 0.20
 FOCAL = 617.0
 FOV_H = 67.2
 FOV_V = 52.3

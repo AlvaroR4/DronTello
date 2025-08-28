@@ -18,16 +18,23 @@ ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
 ANCHO_TOTAL = 640
 ALTO_TOTAL = 480
 
-# Rangos HSV para el color azul (para las esquinas de la puerta)
-# Estos rangos pueden necesitar ajuste según las condiciones de iluminación.
-COLOR_LOWER_BLUE = np.array([0, 100, 60])  # Tono, Saturación, Valor (mínimos)
-COLOR_UPPER_BLUE = np.array([10, 255, 255]) # Tono, Saturación, Valor (máximos)
+# Rangos HSV
+
+#Amarillo
+#COLOR_MIN = np.array([20, 230, 100])  
+#COLOR_MAX = np.array([35, 255, 255])
+#Verde
+#COLOR_MIN = np.array([45, 120, 80])
+#COLOR_MAX = np.array([75, 255, 255])
+#Naranja
+COLOR_MIN = np.array([0, 178, 145])  
+COLOR_MAX = np.array([14, 255, 255])
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
 
-ALTO_REAL = 0.18
-ANCHO_REAL = 0.16
+ALTO_REAL = 0.29
+ANCHO_REAL = 0.20
 FOCAL = 617.0
 FOV_H = 67.2
 FOV_V = 52.3
@@ -230,7 +237,7 @@ class ModuloLocalizacion(Node):
         puntos_esquinas_detectados = [] # Lista de tuplas (cx, cy)
 
         # 1. Segmentar las esquinas 
-        mask_azul = cv2.inRange(img_hsv, COLOR_LOWER_BLUE, COLOR_UPPER_BLUE)
+        mask_azul = cv2.inRange(img_hsv, COLOR_MIN, COLOR_MAX)
 
         # Opcional: Operaciones morfológicas para limpiar la máscara (abrir y cerrar)
         kernel = np.ones((5,5), np.uint8)
@@ -308,8 +315,13 @@ class ModuloLocalizacion(Node):
                 esq2 = x_menor4
                 esq3 = x_menor3
 
-            ancho_puerta = abs(esq2[0] - esq1[0])
-            alto_puerta = abs(esq1[1] - esq4[1])
+            ancho_puerta = math.sqrt((esq2[0] - esq1[0])**2 + (esq2[1] - esq1[1])**2)
+            alto_puerta = math.sqrt((esq1[0] - esq4[0])**2 + (esq1[1] - esq4[1])**2)
+
+            if ancho_puerta > alto_puerta:
+                x = ancho_puerta
+                ancho_puerta = alto_puerta
+                alto_puerta = x
 
             #CALCULAR CENTRO, ÁNGULO ,PROPORCIÓN Y DISTANCIA DE LA PUERTA
             proporcion = ancho_puerta / alto_puerta
@@ -317,8 +329,8 @@ class ModuloLocalizacion(Node):
 
             angulo = 90 -(90*proporcion/proporcion_real)
 
-            x_centro_puerta = esq1[0] + ancho_puerta // 2
-            y_centro_puerta = esq4[1] + alto_puerta // 2
+            x_centro_puerta = int(esq1[0] + ancho_puerta // 2)
+            y_centro_puerta = int(esq4[1] + alto_puerta // 2)
 
             distancia_estimada = self.estimar_distancia(alto_puerta)
 
@@ -364,7 +376,7 @@ class ModuloLocalizacion(Node):
 
             #Dibujar el rectangulo
             esquinas = [esq1, esq2, esq3, esq4]
-            puntos = np.array(esquinas, np.int32)
+            puntos = np.array([[int(x), int(y)] for x, y in esquinas], np.int32)
             puntos = puntos.reshape((-1, 1, 2))
             cv2.polylines(img_visualizacion, [puntos], True, (0, 255, 0), 2)
             cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 5, (0, 0, 255), -1) # Rojo (centro)
