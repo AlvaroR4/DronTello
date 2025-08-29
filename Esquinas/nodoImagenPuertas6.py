@@ -31,15 +31,15 @@ ALTO_IMAGEN = 480
 #COLOR_MIN = np.array([45, 120, 80])
 #COLOR_MAX = np.array([75, 255, 255])
 #Naranja
-COLOR_MIN = np.array([0, 178, 145])  
-COLOR_MAX = np.array([14, 255, 255])
+COLOR_MIN = np.array([0, 140, 145])  
+COLOR_MAX = np.array([12, 255, 255])
 
 
 # Área mínima de un contorno para ser considerado una esquina
-MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
+MIN_CORNER_AREA = 50 # Ajustar según el tamaño esperado de las esquinas en la imagen
 
-ALTO_REAL = 0.29
-ANCHO_REAL = 0.20
+ALTO_REAL = 0.60
+ANCHO_REAL = 0.40
 FOCAL = 617.0
 FOV_H = 67.2
 FOV_V = 52.3
@@ -56,7 +56,7 @@ class ModuloLocalizacion(Node):
         self.bridge = CvBridge()
 
         #temporizador que se ejecuta cada 3 segundos
-        self.timer_log = self.create_timer(3.0, self.log_datos)
+        self.timer_log = self.create_timer(1.0, self.log_datos)
         self.distancia_estimada = None
         self.distancia_calculada = None
         self.coordenada_X = None
@@ -146,9 +146,7 @@ class ModuloLocalizacion(Node):
         self.pitch = np.rad2deg(pitch)
         self.yaw = np.rad2deg(yaw)
 
-        self.get_logger().info(
-            f"Pose recibida: pos=({self.pos_dron_mundo}), yaw={self.yaw:.2f}°"
-        )
+        #self.get_logger().info(f"Pose recibida: pos=({self.pos_dron_mundo}), yaw={self.yaw:.2f}°")
 
     def callback_procesamiento_imagen(self, msg_imagen_ros):
         """
@@ -215,7 +213,7 @@ class ModuloLocalizacion(Node):
         msg.point.z = float(punto_mundo[2])
 
         self.publisher_.publish(msg)
-        self.get_logger().info(f'Publicado punto: {punto_mundo}')
+        #self.get_logger().info(f'Publicado punto: {punto_mundo}')
 
 
     def estimar_distancia(self, alto_puerta_px):
