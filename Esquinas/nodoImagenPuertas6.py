@@ -12,6 +12,9 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped, PointStamped
 from transforms3d.euler import quat2euler 
 from transforms3d.quaternions import quat2mat   # añadido para rotación directa de cuaternión
+from geometry_msgs.msg import PoseArray, Pose
+from visualization_msgs.msg import Marker, MarkerArray
+
 
 # Definición de tópicos ROS2
 ROS_TOPIC_IMAGEN_RAW_INPUT = '/tello/imagen'
@@ -65,8 +68,13 @@ class ModuloLocalizacion(Node):
         self.punto_mundo = None
         self.normal_mundo = None
         self.angulo_orientacion = None
+        self.puertas_publicadas = []   # lista de puntos ya publicados (en mundo)
+        self.umbral_republicar = 0.2   # metros
 
         self.publisher_ = self.create_publisher(PointStamped, '/punto', 10)
+        self.last_publish_time = self.get_clock().now()
+
+        self.publicador = self.create_publisher(Float32MultiArray, 'waypoints_puerta', 10)
 
         # Suscriptor para la imagen RAW
         qos_profile_sub = QoSProfile(
@@ -215,11 +223,27 @@ class ModuloLocalizacion(Node):
         self.publisher_.publish(msg)
         #self.get_logger().info(f'Publicado punto: {punto_mundo}')
 
+    def publicar_mensaje(self, punto_prev, punto_mundo, punto_pos, angulo_orientacion):
+        mensaje = Float32MultiArray()
+
+        array = punto_prev + punto_mundo + punto_pos + [angulo_orientacion]
+
+        mensaje.data = array
+        self.publicador.publish(mensaje)
+
 
     def estimar_distancia(self, alto_puerta_px):
         # Fórmula: Distancia = (Ancho_Real * Longitud_Focal) / Ancho_en_Píxeles
         distancia_mts = (ALTO_REAL * FOCAL) / alto_puerta_px
         return distancia_mts
+    
+    def puerta_ya_publicada(self, nuevo_punto):
+        for p in self.puertas_publicadas:
+            dist = np.linalg.norm(np.array(nuevo_punto) - np.array(p))
+            if dist < self.umbral_republicar:
+                return True
+        return False
+
     
         
     def punto_cuerpo_a_mundo(self, pos_dron_mundo, punto_cuerpo):
@@ -378,8 +402,7 @@ class ModuloLocalizacion(Node):
             #CALCULAR ÁNGULO CON VECTOR NORMAL
             # Vector en cuerpo (apunta hacia el centro de la puerta)
             vector_cuerpo = np.array(punto_cuerpo)
-            # Transformar a mundo sin traslación
-            R_wb = quat2mat(self.quaternion)
+            R_wb = quat2mat(self.quaternion).T
             S = np.diag([1, -1, -1])
             vector_mundo = R_wb @ (S @ vector_cuerpo)
             # Ángulo en mundo respecto al eje X
@@ -408,12 +431,25 @@ class ModuloLocalizacion(Node):
 
 
             # Transformar a mundo (FLU)
-            R_wb = quat2mat(self.quaternion)
+            R_wb = quat2mat(self.quaternion).T
             S = np.diag([1, -1, -1])
             normal_mundo = R_wb @ (S @ normal_cuerpo)
 
-            # Ángulo azimutal en XY mundo
             angulo_orientacion = math.degrees(math.atan2(normal_mundo[1], normal_mundo[0]))
+
+
+
+            #COMPROBAR SI YA SE PUBLICÓ ---
+            if self.puerta_ya_publicada(punto_mundo):
+                self.get_logger().info("Puerta ya publicada")
+            else:
+                normal_mundo_unit = normal_mundo / np.linalg.norm(normal_mundo)
+
+                punto_prev = punto_mundo - 0.5 * normal_mundo_unit
+                punto_post = punto_mundo + 0.3 * normal_mundo_unit
+                self.nodo.publicar_mensaje(punto_prev, punto_mundo, punto_mundo, angulo_orientacion)
+
+                
 
             #IMPRIMIR DATOS
             self.distancia_estimada = distancia_estimada
