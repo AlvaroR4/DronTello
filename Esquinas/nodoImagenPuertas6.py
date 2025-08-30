@@ -228,7 +228,7 @@ class ModuloLocalizacion(Node):
         al sistema de coordenadas mundo usado por ORB-SLAM (X adelante, Y izquierda, Z arriba).
         """
         # 1) Matriz de rotación cuerpo->mundo a partir del cuaternión
-        R_wb = quat2mat(self.quaternion)
+        R_wb = quat2mat(self.quaternion).T
 
         # 2) Conversión FRD -> FLU
         S = np.diag([1, -1, -1])
