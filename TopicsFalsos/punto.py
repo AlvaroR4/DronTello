@@ -12,7 +12,7 @@ class PublicadorPrueba(Node):
         self.pub = self.create_publisher(Float32MultiArray, '/punto_y_angulo', 10)
         # Publicar una vez
         msg = Float32MultiArray()
-        msg.data = [2.0, 1.0, 1.0, 30.0]
+        msg.data = [2.37, -0.5, 1.0, 30.0]
         self.pub.publish(msg)
         self.get_logger().info(f"Publicado único: {msg.data}")
 

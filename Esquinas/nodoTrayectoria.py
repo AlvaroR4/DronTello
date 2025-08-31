@@ -10,9 +10,9 @@ from std_msgs.msg import Float32MultiArray
 # ==============================
 DIST_ANTES_M = 0.20      # Distancia a P' (antes del plano)
 DIST_DESPUES_M = 0.20    # Distancia a P'' (después del plano)
-K_LINEAL = 0.8           # Ganancia proporcional posición
-K_YAW = 1.5              # Ganancia proporcional yaw
-VEL_RC_MAX = 30          # Límite de comandos [-100,100]
+K_LINEAL = 1.0           # Ganancia proporcional posición
+K_YAW = 1.0              # Ganancia proporcional yaw
+VEL_RC_MAX = 10          # Límite de comandos [-100,100]
 TOL_POS_M = 0.07         # Tolerancia de posición
 TOL_YAW_DEG = 3.0        # Tolerancia de yaw
 FRECUENCIA_HZ = 20.0     # Frecuencia de control (Hz)

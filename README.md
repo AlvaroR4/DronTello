@@ -41,6 +41,8 @@ cd ORB-SLAM3-ROS2-Docker/
 sudo docker ps
 sudo docker exec -it orb-slam3-ros2-docker-orb_slam3_22_humble-run-{ID} bash
 rviz2
+
+	
 	
 	
 	
