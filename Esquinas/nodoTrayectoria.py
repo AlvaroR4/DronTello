@@ -1,11 +1,3 @@
-# nodo_trayectoria.py
-# Autor: tú + ChatGPT
-# Descripción:
-#   Este nodo recibe del topic /punto_y_angulo un punto P (x,y,z) y un ángulo (grados).
-#   Calcula un plano tipo "puerta", la trayectoria P' -> P -> P'' y mueve el dron.
-#
-#   Publica velocidades [lr, fb, ud, yv] en /tello/comandos_velocidad para ser usadas con send_rc_control.
-
 import math
 import numpy as np
 import rclpy
@@ -16,11 +8,11 @@ from std_msgs.msg import Float32MultiArray
 # ==============================
 # Constantes de configuración
 # ==============================
-DIST_ANTES_M = 0.50      # Distancia a P' (antes del plano)
-DIST_DESPUES_M = 0.30    # Distancia a P'' (después del plano)
+DIST_ANTES_M = 0.20      # Distancia a P' (antes del plano)
+DIST_DESPUES_M = 0.20    # Distancia a P'' (después del plano)
 K_LINEAL = 0.8           # Ganancia proporcional posición
 K_YAW = 1.5              # Ganancia proporcional yaw
-VEL_RC_MAX = 90          # Límite de comandos [-100,100]
+VEL_RC_MAX = 30          # Límite de comandos [-100,100]
 TOL_POS_M = 0.07         # Tolerancia de posición
 TOL_YAW_DEG = 3.0        # Tolerancia de yaw
 FRECUENCIA_HZ = 20.0     # Frecuencia de control (Hz)
@@ -55,7 +47,7 @@ class NodoTrayectoria(Node):
         # Suscripciones y publicaciones
         # ==============================
         self.sub_pose = self.create_subscription(
-            PoseStamped, '/orb_slam/pose', self.callback_pose, 10)
+            PoseStamped, '/robot_pose_slam', self.callback_pose, 10)
 
         self.sub_datos = self.create_subscription(
             Float32MultiArray, '/punto_y_angulo', self.callback_datos, 10)

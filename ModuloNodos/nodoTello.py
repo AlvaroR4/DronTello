@@ -33,12 +33,12 @@ class NodoTello(Node):
         time.sleep(1.0) 
 
         self.get_logger().info("Despegando Tello")
-        #self.tello.takeoff()
+        self.tello.takeoff()
         time.sleep(2) 
 
         # Publicador para la imagen RAW
         qos_profile_img = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
             depth=1
         )
@@ -71,8 +71,9 @@ class NodoTello(Node):
             fb = int(msg.data[1])
             ud = int(msg.data[2])
             yv = int(msg.data[3])
-            #self.tello.send_rc_control(lr, fb, ud, yv)
-            self.tello.send_rc_control(0, 0, 0, 0)
+            self.get_logger().info(f"RC recibido: lr={lr}, fb={fb}, ud={ud}, yv={yv}")
+            self.tello.send_rc_control(lr, fb, ud, yv)
+            #self.tello.send_rc_control(0, 0, 0, 0)
         except Exception as e:
             self.tello.send_rc_control(0, 0, 0, 0)
 
