@@ -1,4 +1,3 @@
-# nodo_publicador_prueba.py
 # Publica cada segundo un punto y un ángulo en /punto_y_angulo
 # Formato: [x, y, z, angulo_grados]
 

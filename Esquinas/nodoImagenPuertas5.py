@@ -30,8 +30,8 @@ ALTO_IMAGEN = 480
 #COLOR_MIN = np.array([45, 120, 80])
 #COLOR_MAX = np.array([75, 255, 255])
 #Naranja
-COLOR_MIN = np.array([0, 145, 0])  
-COLOR_MAX = np.array([6, 255, 114])
+COLOR_MIN = np.array([0, 191, 63])  
+COLOR_MAX = np.array([10, 255, 142])
 
 
 # Área mínima de un contorno para ser considerado una esquina
