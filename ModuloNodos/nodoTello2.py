@@ -108,47 +108,49 @@ class NodoTello(Node):
     def timer_callback_pose(self):
         """
         Publica un PoseStamped en /robot_pose_slam.
-        Actualmente:
-         - x, y = 0.0 (no hay SLAM real ni odometría integrada todavía)
+        Estimación de posición:
+         - x e y integrando velocidades del dron (cm/s)
          - z = altura del Tello (get_height) en metros
          - orientación: solo yaw (roll=pitch=0) convertidos a cuaternión
-        NOTA: tu otro nodo puede leer este PoseStamped con el callback_pose que
-        has mostrado (usa [q.w, q.x, q.y, q.z] antes de quat2euler).
         """
         try:
+            # Tiempo actual
+            current_time = self.get_clock().now().nanoseconds / 1e9  # segundos
+            if not hasattr(self, 'last_pose_time'):
+                self.last_pose_time = current_time
+            dt = current_time - self.last_pose_time
+            self.last_pose_time = current_time
+
+            # Integrar velocidades para estimar posición
+            try:
+                vx = self.tello.get_speed_x()  # cm/s
+                vy = self.tello.get_speed_y()  # cm/s
+            except Exception:
+                vx, vy = 0.0, 0.0
+
+            if not hasattr(self, 'x'):
+                self.x = 0.0
+            if not hasattr(self, 'y'):
+                self.y = 0.0
+
+            self.x += vx / 100.0 * dt  # convertir a metros
+            self.y += vy / 100.0 * dt
+
             # Obtener altura en cm desde djitellopy, convertir a metros
             try:
                 height_cm = self.tello.get_height()
             except Exception:
                 height_cm = None
+            z = float(height_cm)/100.0 if height_cm is not None else 0.0
 
-            if height_cm is None:
-                z = 0.0
-            else:
-                # djitellopy devuelve altura en cm
-                z = float(height_cm) / 100.0
-
-            # Obtener yaw en grados (djitellopy devuelve -180..180)
+            # Obtener yaw en grados
             try:
                 yaw_deg = self.tello.get_yaw()
             except Exception:
                 yaw_deg = 0.0
-
-            if yaw_deg is None:
-                yaw_deg = 0.0
-
             yaw_rad = math.radians(float(yaw_deg))
 
-            # Por ahora, x e y fijos a 0 (sin SLAM real)
-            x = 0.0
-            y = 0.0
-
-            # Convertir yaw (rotación around Z) a cuaternión.
-            # Con roll = pitch = 0:
-            # qx = 0
-            # qy = 0
-            # qz = sin(yaw/2)
-            # qw = cos(yaw/2)
+            # Convertir yaw a cuaternión (roll=pitch=0)
             qw = math.cos(yaw_rad / 2.0)
             qz = math.sin(yaw_rad / 2.0)
             qx = 0.0
@@ -157,14 +159,12 @@ class NodoTello(Node):
             # Construir mensaje PoseStamped
             msg = PoseStamped()
             msg.header.stamp = self.get_clock().now().to_msg()
-            msg.header.frame_id = "map"  # como si viniera de SLAM
+            msg.header.frame_id = "map"
 
-            # Posición
-            msg.pose.position.x = x
-            msg.pose.position.y = y
+            msg.pose.position.x = self.x
+            msg.pose.position.y = self.y
             msg.pose.position.z = z
 
-            # Orientación (geometry_msgs/Quaternion tiene x,y,z,w)
             msg.pose.orientation.x = qx
             msg.pose.orientation.y = qy
             msg.pose.orientation.z = qz
@@ -174,7 +174,6 @@ class NodoTello(Node):
             self.pub_pose.publish(msg)
 
         except Exception as e:
-            # No interrumpimos el nodo por esto, solo avisamos
             self.get_logger().warning(f"No se pudo publicar pose en /robot_pose_slam: {e}")
 
 
