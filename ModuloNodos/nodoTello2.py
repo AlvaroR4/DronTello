@@ -35,7 +35,9 @@ class NodoTello(Node):
         time.sleep(1.0) 
 
         self.get_logger().info("Despegando Tello")
-        self.tello.takeoff()
+        #self.tello.takeoff()
+        self.tello.turn_motor_on()
+        #self.tello.initiate_throw_takeoff()
         time.sleep(2) 
 
         # Publicador para la imagen RAW
