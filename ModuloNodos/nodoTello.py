@@ -33,7 +33,7 @@ class NodoTello(Node):
         time.sleep(1.0) 
 
         self.get_logger().info("Despegando Tello")
-        self.tello.takeoff()
+        #self.tello.takeoff()
         time.sleep(2) 
 
         # Publicador para la imagen RAW
@@ -120,7 +120,7 @@ def main(args=None):
     try:
         rclpy.spin(nodo_tello)
     except KeyboardInterrupt:
-        nodo_tello.tello.land()
+        nodo_tello.tello.emergency()
         nodo_tello.get_logger().info("Emergencia.")
     finally:
         nodo_tello.destroy_node()

@@ -30,15 +30,15 @@ ALTO_IMAGEN = 480
 #COLOR_MIN = np.array([45, 120, 80])
 #COLOR_MAX = np.array([75, 255, 255])
 #Naranja
-COLOR_MIN = np.array([0, 178, 145])  
-COLOR_MAX = np.array([14, 255, 255])
+COLOR_MIN = np.array([0, 145, 0])  
+COLOR_MAX = np.array([6, 255, 114])
 
 
 # Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100 # Ajustar según el tamaño esperado de las esquinas en la imagen
 
-ALTO_REAL = 0.29
-ANCHO_REAL = 0.20
+ALTO_REAL = 0.285
+ANCHO_REAL = 0.21
 FOCAL = 617.0
 FOV_H = 67.2
 FOV_V = 52.3
@@ -64,6 +64,7 @@ class ModuloLocalizacion(Node):
         self.punto_mundo = None
 
         self.publisher_ = self.create_publisher(PointStamped, '/punto', 10)
+        self.pub_punto_a = self.create_publisher(Float32MultiArray, '/punto_y_angulo', 10)
 
         # Suscriptor para la imagen RAW
         qos_profile_sub = QoSProfile(
@@ -123,6 +124,11 @@ class ModuloLocalizacion(Node):
         self.get_logger().info(f"Publicando imagen de visualización en: {ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT}")
 
 
+    def publicar_punto_a(self, x, y , z , angulo):
+        msg = Float32MultiArray()
+        msg.data = [x, y, z, angulo]
+        self.pub_punto_a.publish(msg)
+        #self.get_logger().info(f"Publicado en /punto_y_angulo: {msg.data}")
 
     def callback_pose(self, msg: PoseStamped):
         # Posición
@@ -142,9 +148,7 @@ class ModuloLocalizacion(Node):
         self.pitch = np.rad2deg(pitch)
         self.yaw = np.rad2deg(yaw)
 
-        self.get_logger().info(
-            f"Pose recibida: pos=({self.pos_dron_mundo}), yaw={self.yaw:.2f}°"
-        )
+        #self.get_logger().info(f"Pose recibida: pos=({self.pos_dron_mundo}), yaw={self.yaw:.2f}°"S)
 
     def callback_procesamiento_imagen(self, msg_imagen_ros):
         """
@@ -211,7 +215,7 @@ class ModuloLocalizacion(Node):
         msg.point.z = float(punto_mundo[2])
 
         self.publisher_.publish(msg)
-        self.get_logger().info(f'Publicado punto: {punto_mundo}')
+        #self.get_logger().info(f'Publicado punto: {punto_mundo}')
 
 
     def estimar_distancia(self, alto_puerta_px):
@@ -443,7 +447,7 @@ class ModuloLocalizacion(Node):
             distancia_calculada = math.sqrt(coordenada_X**2 + coordenada_Y**2 + coordenada_Z**2)
 
             #CONVERTIR EL PUNTO DE EJES CUERPO(DRON) A EJES MUNDO (ORB-SLAM3)
-            punto_cuerpo = [coordenada_X, coordenada_Y, coordenada_Z] #centro de la puerta en ejes mundo
+            punto_cuerpo = [coordenada_X, coordenada_Y, coordenada_Z]
 
             punto_mundo = self.punto_cuerpo_a_mundo(roll, pitch, yaw, pos_dron_mundo, punto_cuerpo)
             
@@ -465,6 +469,7 @@ class ModuloLocalizacion(Node):
             }
             puertas.append(puerta_detectada)
             self.publicar_punto(punto_mundo)
+            self.publicar_punto_a(punto_mundo[0], punto_mundo[1], punto_mundo[2], angulo)
 
             #Dibujar el rectangulo
             esquinas = [esq1, esq2, esq3, esq4]
