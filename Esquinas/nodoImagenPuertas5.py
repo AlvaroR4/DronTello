@@ -13,7 +13,7 @@ from geometry_msgs.msg import PoseStamped, PointStamped
 from transforms3d.euler import quat2euler 
 
 # Definición de tópicos ROS2
-ROS_TOPIC_IMAGEN_RAW_INPUT = '/tello/imagen'
+ROS_TOPIC_IMAGEN_RAW_INPUT = 'camera/image_raw'
 ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
 ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
 
