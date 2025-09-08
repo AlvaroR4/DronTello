@@ -34,6 +34,17 @@ sudo docker compose run --rm orb_slam3_22_humble
 ros2 launch orb_slam3_ros2_wrapper unirobot.launch.py
 
 
+	Version Monocular:
+	
+cd
+cd ORB-SLAM3-ROS2-Docker/
+sudo docker compose run --rm orb_slam3_22_humble
+source /opt/ros/humble/setup.bash
+source /root/colcon_ws/install/setup.bash
+ros2 launch orb_slam3_ros2_wrapper unirobot.launch.py
+
+
+
 	Terminal 5:
 	
 cd
