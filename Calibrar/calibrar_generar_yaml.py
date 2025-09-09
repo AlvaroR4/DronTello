@@ -17,8 +17,8 @@ INPUT_YAML = "gazebo_mono.yaml"   # opcional: base para llenar claves
 OUT_YAML_CAMERA = "Tello_mono_calib_Camera.yaml"
 OUT_YAML_CAMERA1 = "Tello_mono_calib_Camera1.yaml"
 REPROJ_DIR = "reproj"
-CHESSBOARD = (9,9)       # (cols, rows) esquinas internas: cambia si usas otro
-SQUARE_SIZE = 0.11      # en metros (opcional, solo para objpoints escala)
+CHESSBOARD = (6,4)       # (cols, rows) esquinas internas: cambia si usas otro
+SQUARE_SIZE = 0.034      # en metros (opcional, solo para objpoints escala)
 MIN_GOOD_IMAGES = 8      # mínimo deseable es 15-40, pero se chequeará
 
 os.makedirs(REPROJ_DIR, exist_ok=True)

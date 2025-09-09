@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""
-fotosCalibrar_fixed.py
-
-Nodo ROS2 que:
- - se conecta al Tello (djitellopy)
- - publica frames en camera/image_raw (como tu ejemplo)
- - guarda imágenes para calibración (modo periodic u on_request)
- - maneja cierre limpio del stream/Tello
-
-Parámetros (ROS2 params o editar en código):
- - save_mode: "periodic" | "on_request" | "off"
- - output_dir: carpeta para imágenes
- - save_interval: segundos entre guardados en periodic
- - max_images: máximo guardar
- - width,height: resolución guardada
- - request_topic: topic Bool para on_request
-"""
 
 import rclpy
 from rclpy.node import Node
@@ -44,8 +27,6 @@ class TelloImagePublisherSaver(Node):
         self.declare_parameter("output_dir", "tello_calib_images")
         self.declare_parameter("save_interval", 2.0)      # segundos (periodic)
         self.declare_parameter("max_images", 60)
-        self.declare_parameter("width", 640)
-        self.declare_parameter("height", 480)
         self.declare_parameter("request_topic", "camera/save_image")
 
         self.tello_ip = self.get_parameter("tello_ip").get_parameter_value().string_value
@@ -54,8 +35,6 @@ class TelloImagePublisherSaver(Node):
         self.output_dir = self.get_parameter("output_dir").get_parameter_value().string_value
         self.save_interval = self.get_parameter("save_interval").get_parameter_value().double_value
         self.max_images = int(self.get_parameter("max_images").get_parameter_value().integer_value)
-        self.width = int(self.get_parameter("width").get_parameter_value().integer_value)
-        self.height = int(self.get_parameter("height").get_parameter_value().integer_value)
         self.request_topic = self.get_parameter("request_topic").get_parameter_value().string_value
 
         os.makedirs(self.output_dir, exist_ok=True)
@@ -71,7 +50,7 @@ class TelloImagePublisherSaver(Node):
         self.last_save_time = 0.0
         self.saving_enabled = (self.save_mode == "periodic")
 
-        # QoS para publisher (igual al tuyo)
+        # QoS para publisher
         qos_profile_publisher = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -144,7 +123,6 @@ class TelloImagePublisherSaver(Node):
 
         # actualizar latest_frame protegido
         with self.lock:
-            # guardamos copia BGR para usar en saving
             self.latest_frame = frame.copy()
             self.latest_ts = ts
 
@@ -157,7 +135,6 @@ class TelloImagePublisherSaver(Node):
                     self.get_logger().info(f"Alcanzado max_images ({self.max_images}). Parando guardado periódico.")
 
     def request_callback(self, msg: Bool):
-        # modo on_request: si recibimos True guardamos una imagen
         if not msg.data:
             return
         if self.save_count >= self.max_images:
@@ -172,10 +149,7 @@ class TelloImagePublisherSaver(Node):
         if frame is None:
             self.get_logger().warn("Intento de guardado pero no hay frame disponible.", throttle_duration_sec=5.0)
             return
-        # redimensionar si es necesario
-        if (frame.shape[1], frame.shape[0]) != (self.width, self.height):
-            frame = cv2.resize(frame, (self.width, self.height))
-        # nombre archivo
+        # guardar en resolución original
         tstr = time.strftime("%Y%m%d_%H%M%S", time.localtime(ts)) if ts else time.strftime("%Y%m%d_%H%M%S")
         fname = os.path.join(self.output_dir, f"img_{self.save_count:04d}_{tstr}.png")
         try:
