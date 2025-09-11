@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import traceback
 
-ROS_TOPIC_IMAGEN_RAW_INPUT = '/tello/imagen'
+ROS_TOPIC_IMAGEN_RAW_INPUT = 'camera/image_raw'
 ROS_TOPIC_IMAGEN_PROCESADA_OUTPUT = '/tello/imagen_procesada'
 ROS_TOPIC_DATOS_DETECCION_OUTPUT = '/tello/datos_deteccion'
 

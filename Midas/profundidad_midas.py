@@ -8,7 +8,7 @@ import numpy as np
 import traceback
 
 CAMARA_TOPIC_ENTRADA = 'camera/image_raw'
-DEPTH_MAP_TOPIC_SALIDA = '/midas/depth_display' 
+DEPTH_MAP_TOPIC_SALIDA = '/midas/depth_display2' 
 
 MODEL_TYPE = "MiDaS_small" 
 
