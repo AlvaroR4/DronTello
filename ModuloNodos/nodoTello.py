@@ -33,7 +33,7 @@ class NodoTello(Node):
         time.sleep(1.0) 
 
         self.get_logger().info("Despegando Tello")
-        #self.tello.takeoff()
+        self.tello.takeoff()
         #self.tello.turn_motor_on()
         time.sleep(2) 
 
