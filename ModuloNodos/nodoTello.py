@@ -20,9 +20,14 @@ class NodoTello(Node):
         super().__init__('nodo_tello_tello')
         self.get_logger().info(f"Iniciando Nodo Camara Tello")
 
+        self.pub = self.create_publisher(Float32MultiArray, "/tello/yaw", 10)
+
         self.bridge = CvBridge()
         self.tello = Tello(host=TELLO_IP)
         self.frame_reader = None 
+
+        periodo = 1.0 / 30.0
+        self.timer = self.create_timer(periodo, self._publicar_comando)
 
         self.get_logger().info("Conectando al Tello ")
         self.tello.connect()
@@ -63,6 +68,11 @@ class NodoTello(Node):
         # Timer para captura y publicación de imagen
         self.timer_camara = self.create_timer(TIMER_PERIODO_CAMARA, self.timer_callback_camara)
         self.get_logger().info(f"Timer de cámara iniciado ({1.0/TIMER_PERIODO_CAMARA:.1f} FPS).")
+
+    def _publicar_comando(self):
+        msg = Float32MultiArray()
+        msg.data = [float(self.tello.get_yaw())]
+        self.pub.publish(msg)
 
 
     def callback_comandos_velocidad(self, msg):

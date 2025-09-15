@@ -78,35 +78,35 @@ class NodoTeclado(Node):
         nuevo = [0.0, 0.0, 0.0, 0.0]
         if ch == 'w':
             self.avance += VELOCIDAD_AVANCE
-            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]    
+            nuevo = [self.lateral, self.avance, self.vertical, self.yaw]    
             nombre = "AVANZAR (w)"
         elif ch == 's':
             self.avance -= VELOCIDAD_AVANCE
-            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nuevo = [self.lateral, self.avance, self.vertical, self.yaw]
             nombre = "ATRÁS (s)"
         elif ch == 'a':
             self.lateral -= VELOCIDAD_LATERAL
-            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nuevo = [self.lateral, self.avance, self.vertical, self.yaw]
             nombre = "IZQUIERDA (a)"
         elif ch == 'd':
             self.lateral += VELOCIDAD_LATERAL
-            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nuevo = [self.lateral, self.avance, self.vertical, self.yaw]
             nombre = "DERECHA (d)"
         elif ch == 'q':
             self.yaw -=VELOCIDAD_YAW
-            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nuevo = [self.lateral, self.avance, self.vertical, self.yaw]
             nombre = "GIRAR IZQUIERDA (q)"
         elif ch == 'e':
             self.yaw += VELOCIDAD_YAW
-            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nuevo = [self.lateral, self.avance, self.vertical, self.yaw]
             nombre = "GIRAR DERECHA (e)"
         elif ch == 'y':
             self.vertical += VELOCIDAD_VERTICAL
-            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nuevo = [self.lateral, self.avance, self.vertical, self.yaw]
             nombre = "SUBIR (y)"
         elif ch == 'h':
             self.vertical -= VELOCIDAD_VERTICAL
-            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nuevo = [self.lateral, self.avance, self.vertical, self.yaw]
             nombre = "BAJAR (h)"
         elif ch == ' ':
             self.avance = 0.0
