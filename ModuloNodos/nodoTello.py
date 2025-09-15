@@ -33,7 +33,7 @@ class NodoTello(Node):
         time.sleep(1.0) 
 
         self.get_logger().info("Despegando Tello")
-        self.tello.takeoff()
+        #self.tello.takeoff()
         #self.tello.turn_motor_on()
         time.sleep(2) 
 
@@ -73,6 +73,15 @@ class NodoTello(Node):
             ud = int(msg.data[2])
             yv = int(msg.data[3])
             self.get_logger().info(f"RC recibido: lr={lr}, fb={fb}, ud={ud}, yv={yv}")
+            if lr == 2.0 and fb == 0.0 and ud == 0.0:
+                self.tello.land()
+                self.destroy_node()
+            elif lr == 2.0 and fb == 2.0 and ud == 0.0:
+                self.tello.emergency()
+                self.destroy_node()
+            elif lr == 2.0 and fb == 2.0 and ud == 2.0:
+                self.tello.takeoff()
+
             self.tello.send_rc_control(lr, fb, ud, yv)
             #self.tello.send_rc_control(0, 0, 0, 0)
         except Exception as e:

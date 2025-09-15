@@ -8,10 +8,10 @@ import select
 import termios
 import tty
 
-
+#NO PONER VELOCIDAD = 2
 VELOCIDAD_AVANCE = 10.0
-VELOCIDAD_LATERAL = 15.0 
-VELOCIDAD_VERTICAL = 0.0 #sin implementar
+VELOCIDAD_LATERAL = 10.0 
+VELOCIDAD_VERTICAL = 10.0
 VELOCIDAD_YAW = 10.0     
 FREQ_PUBLISH = 10.0       # Hz
 TOPIC = '/tello/comandos_velocidad'
@@ -34,7 +34,15 @@ class NodoTeclado(Node):
         self._kb_thread = threading.Thread(target=self._stdin_loop, daemon=True)
         self._kb_thread.start()
 
-        self.get_logger().info("TECLAS : w/a/s/d/q/e ; ESPACIO -> parar")
+        self.avance = 0.0
+        self.vertical = 0.0
+        self.lateral = 0.0
+        self.yaw = 0.0
+
+        self.get_logger().info("TECLAS : w/a/s/d/q/e ; espacio -> PARAR")
+        self.get_logger().info(" y -> SUBIR ; h -> BAJAR")
+        self.get_logger().info("t -> TAKEOFF; l -> LAND; o -> EMERGENCY")
+
 
     def _publicar_comando(self):
         with self._lock:
@@ -69,32 +77,59 @@ class NodoTeclado(Node):
         ch = ch.lower()
         nuevo = [0.0, 0.0, 0.0, 0.0]
         if ch == 'w':
-            nuevo = [0.0, VELOCIDAD_AVANCE, 0.0, 0.0]
-            label = "AVANZAR (w)"
+            self.avance += VELOCIDAD_AVANCE
+            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]    
+            nombre = "AVANZAR (w)"
         elif ch == 's':
-            nuevo = [0.0, -VELOCIDAD_AVANCE, 0.0, 0.0]
-            label = "ATRÁS (s)"
+            self.avance -= VELOCIDAD_AVANCE
+            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nombre = "ATRÁS (s)"
         elif ch == 'a':
-            nuevo = [-VELOCIDAD_LATERAL, 0.0, 0.0, 0.0]
-            label = "IZQUIERDA (a)"
+            self.lateral -= VELOCIDAD_LATERAL
+            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nombre = "IZQUIERDA (a)"
         elif ch == 'd':
-            nuevo = [VELOCIDAD_LATERAL, 0.0, 0.0, 0.0]
-            label = "DERECHA (d)"
+            self.lateral += VELOCIDAD_LATERAL
+            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nombre = "DERECHA (d)"
         elif ch == 'q':
-            nuevo = [0.0, 0.0, 0.0, -VELOCIDAD_YAW]
-            label = "GIRAR IZQUIERDA (q)"
+            self.yaw -=VELOCIDAD_YAW
+            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nombre = "GIRAR IZQUIERDA (q)"
         elif ch == 'e':
-            nuevo = [0.0, 0.0, 0.0, VELOCIDAD_YAW]
-            label = "GIRAR DERECHA (e)"
+            self.yaw += VELOCIDAD_YAW
+            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nombre = "GIRAR DERECHA (e)"
+        elif ch == 'y':
+            self.vertical += VELOCIDAD_VERTICAL
+            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nombre = "SUBIR (y)"
+        elif ch == 'h':
+            self.vertical -= VELOCIDAD_VERTICAL
+            nuevo = [self.lateral, self.avance, self.yaw, self.vertical]
+            nombre = "BAJAR (h)"
         elif ch == ' ':
-            nuevo = [0.0, 0.0, 0.0, 0.0]
-            label = "PARAR (space)"
+            self.avance = 0.0
+            self.vertical = 0.0
+            self.lateral = 0.0
+            self.yaw = 0.0
+            nuevo = [self.vertical, self.avance, self.yaw, self.vertical]
+            nombre = "PARAR (space)"
+        elif ch == 'l':
+            nuevo = [2.0, 0.0, 0.0, 0.0] #se interpreta como land
+            nombre = "LAND (l)" 
+        elif ch == 'o':
+            nuevo = [2.0, 2.0, 0.0, 0.0] #se interpreta como emergency
+            nombre = "EMERGENCY (o)" 
+        elif ch == 't':
+            nuevo = [2.0, 2.0, 2.0, 0.0] #se interpreta como takeoff
+            nombre = "TAKEOFF (t)" 
         else:
             return
 
         with self._lock:
             if any(abs(a - b) > 1e-6 for a, b in zip(self.comando_actual, nuevo)):
-                self.get_logger().info(f"Comando activo: {label}")
+                self.get_logger().info(f"Comando activo: {nombre} .VELOCIDAD = {self.lateral}, {self.avance}, {self.yaw}, {self.vertical}")
             self.comando_actual = nuevo
 
     def destroy_node(self):
