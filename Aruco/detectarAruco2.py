@@ -3,16 +3,17 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Float32MultiArray
 from cv_bridge import CvBridge, CvBridgeError
 import cv2
+import math
 import numpy as np
 import traceback
 
 INPUT_IMAGE_TOPIC = 'camera/image_raw'          
 OUTPUT_IMAGE_TOPIC = '/tello/imagen_aruco'
 OUTPUT_DISTANCE_TOPIC = '/tello/aruco_distance' 
-
+OUTPUT_POSE_TOPIC = '/tello/aruco_pose'  #[id, x,y,z, roll_deg, pitch_deg, yaw_deg]
 ARUCO_DICT = cv2.aruco.DICT_5X5_250
 MARKER_SIZE = 0.175  # m
 PROC_WIDTH = 960
@@ -23,6 +24,22 @@ camera_matrix = np.array([[900.1766, 0, 481.5253],
                           [0, 894.8176, 371.0677],
                           [0, 0, 1]])
 dist_coeffs = np.array([0.089014, -1.546625, 0.002167, 0.004498, 6.561574])
+
+
+
+def rotation_matrix_to_euler_degrees(R):
+    sy = math.sqrt(R[0,0] * R[0,0] + R[1,0] * R[1,0])
+    singular = sy < 1e-6
+    if not singular:
+        x = math.atan2(R[2,1], R[2,2])   # roll
+        y = math.atan2(-R[2,0], sy)      # pitch
+        z = math.atan2(R[1,0], R[0,0])   # yaw
+    else:
+        # caso singular
+        x = math.atan2(-R[1,2], R[1,1])
+        y = math.atan2(-R[2,0], sy)
+        z = 0.0
+    return (math.degrees(x), math.degrees(y), math.degrees(z))
 
 class ArucoDetectorNode(Node):
     def __init__(self):
@@ -45,23 +62,19 @@ class ArucoDetectorNode(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=2
         )
-
-        self.sub_image = self.create_subscription(Image, INPUT_IMAGE_TOPIC,
-                                                 self.image_callback, qos_sub)
+        qos_pub_pose = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=5
+        )
+        self.pub_pose = self.create_publisher(Float32MultiArray, OUTPUT_POSE_TOPIC, qos_pub_pose)
+        self.sub_image = self.create_subscription(Image, INPUT_IMAGE_TOPIC,self.image_callback, qos_sub)
         self.pub_image = self.create_publisher(Image, OUTPUT_IMAGE_TOPIC, qos_pub_img)
         self.pub_distance = self.create_publisher(Float32, OUTPUT_DISTANCE_TOPIC, qos_pub_dist)
 
-        try:
-            # OpenCV >= 4.7
-            self.aruco_dict = cv2.aruco.getPredefinedDictionary(ARUCO_DICT)
-        except AttributeError:
-            # versiones antiguas
-            self.aruco_dict = cv2.aruco.Dictionary_get(ARUCO_DICT)
+        self.aruco_dict = cv2.aruco.getPredefinedDictionary(ARUCO_DICT)
 
-        try:
-            self.aruco_params = cv2.aruco.DetectorParameters_create()
-        except AttributeError:
-            self.aruco_params = cv2.aruco.DetectorParameters()
+        self.aruco_params = cv2.aruco.DetectorParameters()
 
         self._axis_draw_not_available_logged = False
 
@@ -117,6 +130,24 @@ class ArucoDetectorNode(Node):
                     cv2.drawFrameAxes(img_out, camera_matrix, dist_coeffs, rvec, tvec, 0.1)
 
                 distance_to_publish = dist_m
+        
+            #Para cada aruco detectado publicar su pose
+            for i in range(len(ids)):
+                rvec = np.array(rvecs[i]).reshape(3,)
+                tvec = np.array(tvecs[i]).reshape(3,)
+
+                x_m = float(tvec[0])
+                y_m = float(tvec[1])
+                z_m = float(tvec[2])
+
+                R, _ = cv2.Rodrigues(rvec)
+                roll_deg, pitch_deg, yaw_deg = rotation_matrix_to_euler_degrees(R)
+
+                pose_msg = Float32MultiArray()
+                marker_id = int(ids[i].item()) if hasattr(ids[i], 'item') else int(ids[i])
+                pose_msg.data = [float(marker_id), x_m, y_m, z_m, float(roll_deg), float(pitch_deg), float(yaw_deg)]
+
+                self.pub_pose.publish(pose_msg)
 
         try:
             img_publish_rgb = cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB)
