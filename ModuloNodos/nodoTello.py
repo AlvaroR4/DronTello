@@ -39,7 +39,6 @@ class NodoTello(Node):
 
         self.get_logger().info("Despegando Tello")
         #self.tello.takeoff()
-        #self.tello.turn_motor_on()
         time.sleep(2) 
 
         # Publicador para la imagen RAW
@@ -71,7 +70,8 @@ class NodoTello(Node):
 
     def _publicar_comando(self):
         msg = Float32MultiArray()
-        msg.data = [float(self.tello.get_yaw())]
+        #msg.data = [float(self.tello.get_yaw())]
+        msg.data = [float(self.tello.get_height())]
         self.pub.publish(msg)
 
 

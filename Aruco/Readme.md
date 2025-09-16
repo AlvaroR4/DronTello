@@ -1,0 +1,1 @@
+Para obtener un Aruco y su id: https://chev.me/arucogen/
