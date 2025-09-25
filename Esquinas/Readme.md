@@ -25,3 +25,6 @@
                       visualización en Rviz, y nueva lógica de alto y ancho
 
 -nodoImagenPuertas5: transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo
+
+-nodoImagenPuertas6: igual que el 5, pero esta vez sabiendo que publica la pose el dron y sin cuaterniones
+
