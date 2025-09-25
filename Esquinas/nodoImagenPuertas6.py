@@ -16,7 +16,7 @@ from geometry_msgs.msg import PointStamped
 ROS_TOPIC_IMAGEN_RAW_INPUT = 'camera/image_raw'
 ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
 ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
-ROS_TOPIC_POSE_ANGLES = '/tello/pose_angles'  # ahora recibimos la pose en este tópico (x,y,z, roll_deg, pitch_deg, yaw_deg)
+ROS_TOPIC_POSE_ANGLES = '/tello/pose_corregida'
 
 # Dimensiones de procesamiento de la imagen
 ANCHO_IMAGEN = 640

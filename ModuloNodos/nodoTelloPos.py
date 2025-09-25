@@ -17,9 +17,9 @@ import traceback
 TELLO_IP = '192.168.10.1'
 ROS_TOPIC_IMAGEN_RAW = 'camera/image_raw'
 ROS_TOPIC_COMANDOS_VELOCIDAD = 'tello/comandos_velocidad'
-ROS_TOPIC_POSE = '/tello/posicion'   # aqui publicamos [altura, x, y, z, roll_deg, pitch_deg, yaw_deg]
+ROS_TOPIC_POSE = '/tello/posicion'   # [altura, x, y, z, roll, pitch, yaw]
 
-TIMER_PERIODO_CAMARA = 0.03  # placeholder, la cámara publica por su propio loop
+TIMER_PERIODO_CAMARA = 0.03
 
 
 class NodoTelloPos(Node):
@@ -29,7 +29,7 @@ class NodoTelloPos(Node):
 
         # Publicador de pose/posición
         self.pub = self.create_publisher(Float32MultiArray, ROS_TOPIC_POSE, 10)
-        self.pub_alt = self.create_publisher(Float32MultiArray, '/tello/altura', 2)
+        self.pub_alt = self.create_publisher(Float32MultiArray, '/tello/altura', 2) #para probar el altimetro
 
         # CvBridge y publicador de imagen
         self.bridge = CvBridge()
@@ -83,7 +83,6 @@ class NodoTelloPos(Node):
         self.latest_log_data = data
 
     def _start_video_thread(self):
-        # Implementación ligera: arrancar lectura de vídeo en hilo para publicar frames (si ya lo tenías hecho, mantenlo)
         def _video_loop():
             try:
                 container = av.open(self.tello.get_video_stream())
@@ -101,9 +100,6 @@ class NodoTelloPos(Node):
         t.start()
 
     def _safe_get(self, obj, *attrs, default=0.0):
-        """
-        Intenta obtener obj.attr1.attr2... devolviendo default si no existe.
-        """
         try:
             cur = obj
             for a in attrs:
@@ -152,7 +148,7 @@ class NodoTelloPos(Node):
                     except Exception:
                         pass
 
-        # 2) si no hay en flight_data, intentar mirar latest_log_data (p. ej. campos imu/attitude/mvo)
+        # 2) si no hay en flight_data, intentar mirar latest_log_data
         if (roll == 0.0 and pitch == 0.0 and yaw == 0.0) and (self.latest_log_data is not None):
             ld = self.latest_log_data
             # intentos en nested attrs
@@ -164,8 +160,6 @@ class NodoTelloPos(Node):
             pitch = pitch or self._safe_get(ld, 'imu', 'pitch', default=pitch)
             yaw = yaw or self._safe_get(ld, 'imu', 'yaw', default=yaw)
 
-        # si siguen a cero, intentar en flight_data con nombres alternativos (por si vienen en centesimas)
-        # (ya hemos intentado los nombres más comunes arriba)
         try:
             return float(roll), float(pitch), float(yaw)
         except Exception:
@@ -197,7 +191,6 @@ class NodoTelloPos(Node):
             # obtener rotaciones
             roll_deg, pitch_deg, yaw_deg = self._get_rotations_from_flight_or_log()
 
-            # Si no conseguimos valores, intentar extraer directo desde latest_flight_data como fallback:
             try:
                 if (roll_deg == 0.0 and pitch_deg == 0.0 and yaw_deg == 0.0) and self.latest_flight_data is not None:
                     roll_deg = float(getattr(self.latest_flight_data, 'roll', roll_deg))
@@ -206,14 +199,12 @@ class NodoTelloPos(Node):
             except Exception:
                 pass
 
-            # Publicar: mantenemos ALTURA en indice 0 por compatibilidad con nodo intermedio
             msg.data = [float(altura), float(x), float(y), float(z),
                         float(roll_deg), float(pitch_deg), float(yaw_deg)]
             self.pub.publish(msg)
 
         except Exception as e:
             self.get_logger().error(f"Error publicando pose: {e}")
-            # En caso de fallo publicamos ceros (misma longitud)
             msg.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             try:
                 self.pub.publish(msg)
@@ -221,7 +212,6 @@ class NodoTelloPos(Node):
                 pass
 
     def callback_comandos_velocidad(self, msg):
-        # Manejo de comandos de velocidad (tu lógica original)
         try:
             lr = float(msg.data[0])
         except Exception:
@@ -239,7 +229,6 @@ class NodoTelloPos(Node):
         except Exception:
             yv = 0.0
 
-        # Ejemplos de comandos especiales (mantén tu lógica original)
         if lr == 2.0 and fb == 0.0 and ud == 0.0:
             self.get_logger().info("Comando: land")
             self.tello.land()
@@ -263,7 +252,7 @@ class NodoTelloPos(Node):
         msg = Float32MultiArray()
         try:
             altura_cm = float(getattr(self.latest_flight_data, 'height', 0.0) or 0.0)
-            altura_m = altura_cm / 100.0 if altura_cm > 1.0 else altura_cm  # si >1 asumir cm
+            altura_m = altura_cm / 100.0 if altura_cm > 1.0 else altura_cm 
         except Exception:
             altura_m = 0.0
         msg.data = [altura_m]
@@ -337,11 +326,8 @@ class NodoTelloPos(Node):
                     pass
 
         except Exception:
-            # en caso de fallo mantener 0.0
             altura_altimeter = 0.0
-
-        # Si no se ha detectado nada, altura_altimeter seguirá 0.0.
-        # Si prefieres, puedes igualarlo a la altura estimada; aquí lo dejamos como está para comparar.
+            
         msg.data = [float(altura_altimeter)]
 
         try:
