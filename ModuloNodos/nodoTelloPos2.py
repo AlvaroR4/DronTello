@@ -29,6 +29,9 @@ class NodoTelloPy(Node):
         self.ultimo_log = None
         self.ultimo_frame = None
         self.ultimo_flight = None
+        self.silenciar_logs = False
+        self._orig_stdout_write = None
+        self._orig_stderr_write = None
 
         # publicadores
         qos_profile_img = QoSProfile(
@@ -71,29 +74,207 @@ class NodoTelloPy(Node):
         hilo_conexion = threading.Thread(target=self._iniciar_conexion, daemon=True)
         hilo_conexion.start()
 
-    def _iniciar_conexion(self):
+    def _aplicar_filtro_logs(self):
+        """
+        Si self.silenciar_logs es True, reemplaza sys.stdout.write y sys.stderr.write
+        por funciones que filtran líneas concretas (p. ej. 'LogData: corrupted data').
+        Si silenciar_logs es False, no hace nada.
+        """
         try:
+            if not getattr(self, 'silenciar_logs', False):
+                return
+            import sys
+            # guardar originales solo una vez
+            if getattr(self, '_orig_stdout_write', None) is None:
+                self._orig_stdout_write = sys.stdout.write
+                self._orig_stderr_write = sys.stderr.write
+
+            def _filtro_write_stdout(s):
+                try:
+                    if 'LogData: corrupted data' in s or 'video recv: timeout' in s:
+                        return
+                except Exception:
+                    pass
+                return self._orig_stdout_write(s)
+
+            def _filtro_write_stderr(s):
+                try:
+                    if 'LogData: corrupted data' in s or 'video recv: timeout' in s:
+                        return
+                except Exception:
+                    pass
+                return self._orig_stderr_write(s)
+
+            try:
+                sys.stdout.write = _filtro_write_stdout
+                sys.stderr.write = _filtro_write_stderr
+            except Exception:
+                # si no podemos reasignar, no pasa nada
+                pass
+        except Exception:
+            # protección total: no dejar que esto rompa el hilo
+            return
+
+
+    def _restaurar_logs(self):
+        """
+        Restaura sys.stdout.write / sys.stderr.write si fueron guardados por _aplicar_filtro_logs.
+        """
+        try:
+            import sys
+            if getattr(self, '_orig_stdout_write', None) is not None:
+                try:
+                    sys.stdout.write = self._orig_stdout_write
+                except Exception:
+                    pass
+            if getattr(self, '_orig_stderr_write', None) is not None:
+                try:
+                    sys.stderr.write = self._orig_stderr_write
+                except Exception:
+                    pass
+        except Exception:
+            return
+
+    def _video_loop(self, container):
+        """
+        Lee paquetes de vídeo desde el container (av.open) y actualiza self.ultimo_frame.
+        Se comporta similar a tu ejemplo: decodifica frames, salta los primeros (frame_skip)
+        y adapta el frame_skip dinámicamente para evitar acumulación.
+        """
+        try:
+            frame_skip = 120  # puedes ajustar (tu ejemplo usaba 300)
+            # iterar sobre frames; si container se cierra, salir
+            while getattr(self, '_video_thread_running', False):
+                try:
+                    for frame in container.decode(video=0):
+                        if not getattr(self, '_video_thread_running', False):
+                            break
+                        if frame is None:
+                            continue
+
+                        if frame_skip > 0:
+                            frame_skip -= 1
+                            continue
+
+                        start_time = time.time()
+                        try:
+                            image_rgb = frame.to_image()  # PIL.Image
+                            image = cv2.cvtColor(np.array(image_rgb), cv2.COLOR_RGB2BGR)
+                        except Exception:
+                            # si falla frame.to_image(), intentar decodificar desde plane data
+                            try:
+                                arr = frame.to_ndarray(format='bgr24')
+                                image = arr
+                            except Exception:
+                                continue
+
+                        # opcional: limitar tamaño máximo para no saturar memoria/CPU
+                        try:
+                            h, w = image.shape[:2]
+                            max_dim = 960
+                            if max(h, w) > max_dim:
+                                scale = max_dim / float(max(h, w))
+                                image = cv2.resize(image, (int(w*scale), int(h*scale)))
+                        except Exception:
+                            pass
+
+                        # actualizar frame compartido (no bloqueante)
+                        self.ultimo_frame = image
+
+                        # controlar frame_skip dinámico similar al ejemplo para evitar backlog
+                        try:
+                            if frame.time_base < 1.0 / 60.0:
+                                time_base = 1.0 / 60.0
+                            else:
+                                time_base = frame.time_base
+                            frame_skip = int((time.time() - start_time) / time_base)
+                            if frame_skip < 0:
+                                frame_skip = 0
+                        except Exception:
+                            frame_skip = 0
+
+                        # si el thread se solicita parar, romper el bucle
+                        if not getattr(self, '_video_thread_running', False):
+                            break
+
+                    # Si salimos del for (container.decode) sin frames, esperar un poco y reintentar
+                    time.sleep(0.01)
+                except av.AVError:
+                    # error de decodificación/interrupción del stream: intentar reabrir container
+                    try:
+                        time.sleep(0.2)
+                        stream_url = self.tello.get_video_stream()
+                        container = av.open(stream_url)
+                        # continuar bucle con nuevo container
+                    except Exception:
+                        time.sleep(0.5)
+                        continue
+                except Exception:
+                    # cualquier otra excepción no detiene el hilo
+                    time.sleep(0.1)
+                    continue
+        finally:
+            # cerrar container si existe
+            try:
+                if container is not None:
+                    try:
+                        container.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            self._video_thread_running = False
+
+    def _iniciar_conexion(self):
+        """
+        Conecta al Tello y arranca el hilo de vídeo usando av.open(self.tello.get_video_stream()).
+        Intenta reconectar/abrir varias veces si falla.
+        """
+        try:
+            # aplicar filtro temporal de logs si está activado
+            self._aplicar_filtro_logs()
+
             self.tello.set_loglevel(self.tello.LOG_ERROR)
-            # Suscripciones a eventos
-            self.tello.subscribe(self.tello.EVENT_FLIGHT_DATA, self._on_flight_data)
-            self.tello.subscribe(self.tello.EVENT_LOG_DATA, self._on_log_data)
-            self.tello.subscribe(self.tello.EVENT_VIDEO_FRAME, self._on_video_frame)
+            # suscripciones básicas (flight/log) se mantienen
+            try:
+                self.tello.subscribe(self.tello.EVENT_FLIGHT_DATA, self._on_flight_data)
+                self.tello.subscribe(self.tello.EVENT_LOG_DATA, self._on_log_data)
+            except Exception:
+                pass
 
             self.tello.connect()
             self.tello.wait_for_connection(30.0)
 
-            # iniciar streaming de vídeo
-            try:
-                self.tello.start_video()
-            except Exception:
+            # Intentar iniciar stream por get_video_stream() + av.open
+            container = None
+            retry = 5
+            while container is None and retry > 0:
+                retry -= 1
                 try:
-                    self.tello.send_command('streamon')
-                except Exception:
-                    pass
+                    stream_url = self.tello.get_video_stream()
+                    container = av.open(stream_url)
+                except Exception as e:
+                    # esperar un poco y reintentar (no spamear logs)
+                    time.sleep(0.5)
 
-            self.get_logger().info("Tello conectado y stream iniciado.")
+            # si container ok, arrancar hilo que lo consume
+            if container is not None:
+                self._video_container = container
+                self._video_thread_running = True
+                hilo_video = threading.Thread(target=self._video_loop, args=(container,), daemon=True)
+                hilo_video.start()
+            else:
+                # no pudimos abrir container; seguir intentando en background sin bloquear
+                self._video_container = None
+                self._video_thread_running = False
+
+            # restaurar logs si los habíamos silenciado
+            self._restaurar_logs()
+            self.get_logger().info("Tello conectado y (intento) stream iniciado.")
         except Exception as ex:
+            self._restaurar_logs()
             self.get_logger().info(f"Error conexión: {ex}")
+
 
     # ----------------- handlers de tellopy -----------------
     def _on_flight_data(self, event, sender, data, **args):
@@ -114,15 +295,35 @@ class NodoTelloPy(Node):
 
     # ----------------- publicación de imagen -----------------
     def _publicar_frame(self):
-        if self.ultimo_frame is None:
-            return
+        """
+        Publica self.ultimo_frame en camera/image_raw. Si no hay frame, publica un frame negro
+        como fallback. (Mantiene el comportamiento anterior.)
+        """
         try:
-            ros_image_msg = self.bridge.cv2_to_imgmsg(self.ultimo_frame, encoding="bgr8")
+            if getattr(self, 'ultimo_frame', None) is None:
+                h = 480; w = 640
+                black = np.zeros((h, w, 3), dtype=np.uint8)
+                ros_image_msg = self.bridge.cv2_to_imgmsg(black, encoding="bgr8")
+                ros_image_msg.header.stamp = self.get_clock().now().to_msg()
+                ros_image_msg.header.frame_id = "tello_camera_link_raw"
+                self.publicador_imagen.publish(ros_image_msg)
+                return
+
+            try:
+                ros_image_msg = self.bridge.cv2_to_imgmsg(self.ultimo_frame, encoding="bgr8")
+            except Exception:
+                try:
+                    frame = self.ultimo_frame.astype(np.uint8)
+                    ros_image_msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+                except Exception:
+                    return
+
             ros_image_msg.header.stamp = self.get_clock().now().to_msg()
             ros_image_msg.header.frame_id = "tello_camera_link_raw"
             self.publicador_imagen.publish(ros_image_msg)
         except Exception:
-            pass
+            return
+
 
     def _publicar_pose(self):
         msg = Float32MultiArray()
