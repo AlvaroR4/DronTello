@@ -29,7 +29,7 @@ class NodoTelloPos(Node):
 
         # Publicador de pose/posición
         self.pub = self.create_publisher(Float32MultiArray, ROS_TOPIC_POSE, 10)
-        self.pub_alt = self.create_publisher(Float32MultiArray, '/tello/altura', 2) #para probar el altimetro
+        self.pub_alt = self.create_publisher(Float32MultiArray, '/tello/altura', 2) 
 
         # CvBridge y publicador de imagen
         self.bridge = CvBridge()
@@ -260,84 +260,6 @@ class NodoTelloPos(Node):
             self.pub_alt.publish(msg)
         except Exception:
             pass
-
-    def publicar_altimetro2(self):
-        """
-        Publica en /tello/altura el valor del altímetro (si está disponible).
-        Mensaje: std_msgs/Float32MultiArray.data = [altura_altimeter]
-        NOTA: las unidades dependen de lo que exponga el firmware (a veces cm).
-        """
-        msg = Float32MultiArray()
-        altura_altimeter = 0.0
-
-        try:
-            # 1) intentar en latest_flight_data (campos comunes: tof, tof_distance, altitude)
-            if self.latest_flight_data is not None:
-                fd = self.latest_flight_data
-                # probar varios nombres comunes
-                if hasattr(fd, 'tof'):
-                    try:
-                        altura_altimeter = float(getattr(fd, 'tof', 0.0) or 0.0)
-                    except Exception:
-                        altura_altimeter = altura_altimeter
-                if (altura_altimeter == 0.0) and hasattr(fd, 'tof_distance'):
-                    try:
-                        altura_altimeter = float(getattr(fd, 'tof_distance', 0.0) or 0.0)
-                    except Exception:
-                        pass
-                if (altura_altimeter == 0.0) and hasattr(fd, 'altitude'):
-                    try:
-                        altura_altimeter = float(getattr(fd, 'altitude', 0.0) or 0.0)
-                    except Exception:
-                        pass
-                if (altura_altimeter == 0.0) and hasattr(fd, 'height'):
-                    # si quieres distinguir height vs altimeter, coméntalo; aquí lo dejamos como fallback
-                    try:
-                        altura_altimeter = float(getattr(fd, 'height', 0.0) or 0.0)
-                    except Exception:
-                        pass
-
-            # 2) fallback a latest_log_data (rutas anidadas como tof.distance, dist_to_ground, etc.)
-            if (altura_altimeter == 0.0) and (self.latest_log_data is not None):
-                ld = self.latest_log_data
-                try:
-                    # probar atributo directo 'tof'
-                    tof = getattr(ld, 'tof', None)
-                    if tof is not None:
-                        # si 'tof' es un objeto con .distance o .dist
-                        if hasattr(tof, 'distance'):
-                            altura_altimeter = float(getattr(tof, 'distance', 0.0) or 0.0)
-                        elif hasattr(tof, 'dist'):
-                            altura_altimeter = float(getattr(tof, 'dist', 0.0) or 0.0)
-                        else:
-                            # si tof es numérico
-                            try:
-                                altura_altimeter = float(tof)
-                            except Exception:
-                                pass
-
-                    # otros campos posibles
-                    if altura_altimeter == 0.0:
-                        if hasattr(ld, 'dist_to_ground'):
-                            altura_altimeter = float(getattr(ld, 'dist_to_ground', 0.0) or 0.0)
-                        elif hasattr(ld, 'altitude'):
-                            altura_altimeter = float(getattr(ld, 'altitude', 0.0) or 0.0)
-                except Exception:
-                    pass
-
-        except Exception:
-            altura_altimeter = 0.0
-            
-        msg.data = [float(altura_altimeter)]
-
-        try:
-            self.pub_alt.publish(msg)
-        except Exception as e:
-            # loguear pero no interrumpir
-            try:
-                self.get_logger().warning(f"No se pudo publicar /tello/altura: {e}")
-            except Exception:
-                pass
 
 
     def destroy_node(self):

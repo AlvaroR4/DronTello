@@ -88,6 +88,7 @@ class NodoIntermedioPose(Node):
 
             if len(data) >= 4:
                 # data[0]=altura, data[1]=x, data[2]=y, data[3]=z
+                altura = float(data[0])
                 x = float(data[1])
                 y = float(data[2])
                 z = float(data[3])
@@ -106,7 +107,7 @@ class NodoIntermedioPose(Node):
             elif len(data) >= 5:
                 yaw = float(data[4])
 
-            self.offset_pos = [x, y, z]
+            self.offset_pos = [x, y, altura]
             self.offset_angles = [roll, pitch, yaw]
             self.origin_fijado = True
             self.get_logger().info(f"Origen fijado (0,0,0). Offset guardado: pos={self.offset_pos}, angles={self.offset_angles}")
