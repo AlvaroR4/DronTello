@@ -11,12 +11,17 @@ import time
 import math
 import numpy as np
 import cv2
+import subprocess
+import sys
 
 ROS_TOPIC_IMAGEN_RAW = 'camera/image_raw'
 ROS_TOPIC_COMANDOS_VELOCIDAD = '/tello/comandos_velocidad'
 ROS_TOPIC_POSE = '/tello/pose'  # publicador con [altura_altimetro, posx, posy, posz, roll_deg, pitch_deg, yaw_deg]
 TIMER_PERIOD_POSE = 0.1  # publicar pose a 10 Hz
 TIMER_PERIOD_CAMARA = 1.0 / 30.0  # ~30 FPS para la cámara
+
+READ_CHUNK = 4096
+FFMPEG_FPS = int(1.0 / TIMER_PERIOD_CAMARA)
 
 class NodoTelloPy(Node):
     def __init__(self):
@@ -29,9 +34,6 @@ class NodoTelloPy(Node):
         self.ultimo_log = None
         self.ultimo_frame = None
         self.ultimo_flight = None
-        self.silenciar_logs = False
-        self._orig_stdout_write = None
-        self._orig_stderr_write = None
 
         # publicadores
         qos_profile_img = QoSProfile(
@@ -68,213 +70,168 @@ class NodoTelloPy(Node):
         self.timer_pose = self.create_timer(TIMER_PERIOD_POSE, self._publicar_pose)
         self.timer_camara = self.create_timer(TIMER_PERIOD_CAMARA, self._publicar_frame)
 
-        # conectar al tello y suscribirse a eventos
-        self.get_logger().info("Conectando al Tello (tellopy)...")
-        # conectar en hilo aparte para no bloquear el init
+        # watchdog para evitar stick persistente (si no llegan comandos, enviar 0s)
+        self._last_cmd_time = time.time()
+        self._cmd_watchdog = self.create_timer(0.2, self._cmd_watchdog_cb)
+
+        # variables para pipeline de vídeo minimal
+        self._ffmpeg_proc = None
+        self._ffmpeg_thread = None
+        self._stdout_buffer = bytearray()
+        self._stop_event = threading.Event()
+
+        # conectar al tello y suscribirse a eventos (en hilo para no bloquear init)
         hilo_conexion = threading.Thread(target=self._iniciar_conexion, daemon=True)
         hilo_conexion.start()
 
-    def _aplicar_filtro_logs(self):
-        """
-        Si self.silenciar_logs es True, reemplaza sys.stdout.write y sys.stderr.write
-        por funciones que filtran líneas concretas (p. ej. 'LogData: corrupted data').
-        Si silenciar_logs es False, no hace nada.
-        """
-        try:
-            if not getattr(self, 'silenciar_logs', False):
-                return
-            import sys
-            # guardar originales solo una vez
-            if getattr(self, '_orig_stdout_write', None) is None:
-                self._orig_stdout_write = sys.stdout.write
-                self._orig_stderr_write = sys.stderr.write
-
-            def _filtro_write_stdout(s):
-                try:
-                    if 'LogData: corrupted data' in s or 'video recv: timeout' in s:
-                        return
-                except Exception:
-                    pass
-                return self._orig_stdout_write(s)
-
-            def _filtro_write_stderr(s):
-                try:
-                    if 'LogData: corrupted data' in s or 'video recv: timeout' in s:
-                        return
-                except Exception:
-                    pass
-                return self._orig_stderr_write(s)
-
-            try:
-                sys.stdout.write = _filtro_write_stdout
-                sys.stderr.write = _filtro_write_stderr
-            except Exception:
-                # si no podemos reasignar, no pasa nada
-                pass
-        except Exception:
-            # protección total: no dejar que esto rompa el hilo
-            return
-
-
-    def _restaurar_logs(self):
-        """
-        Restaura sys.stdout.write / sys.stderr.write si fueron guardados por _aplicar_filtro_logs.
-        """
-        try:
-            import sys
-            if getattr(self, '_orig_stdout_write', None) is not None:
-                try:
-                    sys.stdout.write = self._orig_stdout_write
-                except Exception:
-                    pass
-            if getattr(self, '_orig_stderr_write', None) is not None:
-                try:
-                    sys.stderr.write = self._orig_stderr_write
-                except Exception:
-                    pass
-        except Exception:
-            return
-
-    def _video_loop(self, container):
-        """
-        Lee paquetes de vídeo desde el container (av.open) y actualiza self.ultimo_frame.
-        Se comporta similar a tu ejemplo: decodifica frames, salta los primeros (frame_skip)
-        y adapta el frame_skip dinámicamente para evitar acumulación.
-        """
-        try:
-            frame_skip = 120  # puedes ajustar (tu ejemplo usaba 300)
-            # iterar sobre frames; si container se cierra, salir
-            while getattr(self, '_video_thread_running', False):
-                try:
-                    for frame in container.decode(video=0):
-                        if not getattr(self, '_video_thread_running', False):
-                            break
-                        if frame is None:
-                            continue
-
-                        if frame_skip > 0:
-                            frame_skip -= 1
-                            continue
-
-                        start_time = time.time()
-                        try:
-                            image_rgb = frame.to_image()  # PIL.Image
-                            image = cv2.cvtColor(np.array(image_rgb), cv2.COLOR_RGB2BGR)
-                        except Exception:
-                            # si falla frame.to_image(), intentar decodificar desde plane data
-                            try:
-                                arr = frame.to_ndarray(format='bgr24')
-                                image = arr
-                            except Exception:
-                                continue
-
-                        # opcional: limitar tamaño máximo para no saturar memoria/CPU
-                        try:
-                            h, w = image.shape[:2]
-                            max_dim = 960
-                            if max(h, w) > max_dim:
-                                scale = max_dim / float(max(h, w))
-                                image = cv2.resize(image, (int(w*scale), int(h*scale)))
-                        except Exception:
-                            pass
-
-                        # actualizar frame compartido (no bloqueante)
-                        self.ultimo_frame = image
-
-                        # controlar frame_skip dinámico similar al ejemplo para evitar backlog
-                        try:
-                            if frame.time_base < 1.0 / 60.0:
-                                time_base = 1.0 / 60.0
-                            else:
-                                time_base = frame.time_base
-                            frame_skip = int((time.time() - start_time) / time_base)
-                            if frame_skip < 0:
-                                frame_skip = 0
-                        except Exception:
-                            frame_skip = 0
-
-                        # si el thread se solicita parar, romper el bucle
-                        if not getattr(self, '_video_thread_running', False):
-                            break
-
-                    # Si salimos del for (container.decode) sin frames, esperar un poco y reintentar
-                    time.sleep(0.01)
-                except av.AVError:
-                    # error de decodificación/interrupción del stream: intentar reabrir container
-                    try:
-                        time.sleep(0.2)
-                        stream_url = self.tello.get_video_stream()
-                        container = av.open(stream_url)
-                        # continuar bucle con nuevo container
-                    except Exception:
-                        time.sleep(0.5)
-                        continue
-                except Exception:
-                    # cualquier otra excepción no detiene el hilo
-                    time.sleep(0.1)
-                    continue
-        finally:
-            # cerrar container si existe
-            try:
-                if container is not None:
-                    try:
-                        container.close()
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            self._video_thread_running = False
-
     def _iniciar_conexion(self):
         """
-        Conecta al Tello y arranca el hilo de vídeo usando av.open(self.tello.get_video_stream()).
-        Intenta reconectar/abrir varias veces si falla.
+        Conecta al Tello, suscribe eventos de flight/log y configura la tubería minimal
+        de vídeo: tellopy EVENT_VIDEO_FRAME -> ffmpeg stdin (-f h264) -> ffmpeg stdout MJPEG ->
+        ensamblado JPEG -> ultimo_frame (cv2).
         """
         try:
-            # aplicar filtro temporal de logs si está activado
-            self._aplicar_filtro_logs()
-
-            self.tello.set_loglevel(self.tello.LOG_ERROR)
-            # suscripciones básicas (flight/log) se mantienen
+            # Suscripciones de datos (flight/log)
             try:
                 self.tello.subscribe(self.tello.EVENT_FLIGHT_DATA, self._on_flight_data)
                 self.tello.subscribe(self.tello.EVENT_LOG_DATA, self._on_log_data)
             except Exception:
                 pass
 
-            self.tello.connect()
-            self.tello.wait_for_connection(30.0)
+            # Conectar y esperar
+            try:
+                self.tello.connect()
+                self.tello.wait_for_connection(30.0)
+            except Exception as e:
+                self.get_logger().warning(f"No se ha podido conectar al Tello: {e}")
+                return
 
-            # Intentar iniciar stream por get_video_stream() + av.open
-            container = None
-            retry = 5
-            while container is None and retry > 0:
-                retry -= 1
+            # Lanzar ffmpeg: entrada H264 desde stdin, salida MJPEG por stdout
+            ff_cmd = [
+                'ffmpeg', '-hide_banner', '-loglevel', 'error',
+                '-fflags', 'nobuffer', '-flags', 'low_delay',
+                '-f', 'h264', '-i', 'pipe:0',
+                '-r', str(FFMPEG_FPS),
+                '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1'
+            ]
+            try:
+                self._ffmpeg_proc = subprocess.Popen(
+                    ff_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0
+                )
+            except Exception as e:
+                self.get_logger().warning(f"ffmpeg no pudo arrancar: {e}")
+                self._ffmpeg_proc = None
+
+            # Suscribirse a paquetes H264 provenientes de tellopy
+            try:
+                self.tello.subscribe(self.tello.EVENT_VIDEO_FRAME, self._video_frame_handler)
+                # solicitar inicio del stream
                 try:
-                    stream_url = self.tello.get_video_stream()
-                    container = av.open(stream_url)
-                except Exception as e:
-                    # esperar un poco y reintentar (no spamear logs)
-                    time.sleep(0.5)
+                    self.tello.start_video()
+                except Exception:
+                    pass
+            except Exception as e:
+                self.get_logger().warning(f"No se pudo subscribir a EVENT_VIDEO_FRAME: {e}")
 
-            # si container ok, arrancar hilo que lo consume
-            if container is not None:
-                self._video_container = container
-                self._video_thread_running = True
-                hilo_video = threading.Thread(target=self._video_loop, args=(container,), daemon=True)
-                hilo_video.start()
-            else:
-                # no pudimos abrir container; seguir intentando en background sin bloquear
-                self._video_container = None
-                self._video_thread_running = False
+            # arrancar thread que lee stdout de ffmpeg y ensambla JPEGs
+            if self._ffmpeg_proc and self._ffmpeg_proc.stdout:
+                self._ffmpeg_thread = threading.Thread(target=self._ffmpeg_stdout_reader, daemon=True)
+                self._ffmpeg_thread.start()
 
-            # restaurar logs si los habíamos silenciado
-            self._restaurar_logs()
-            self.get_logger().info("Tello conectado y (intento) stream iniciado.")
+            # enviar ceros iniciales por seguridad (necesario en algunos casos)
+            try:
+                self._send_zero_rc()
+            except Exception:
+                pass
+
+            self.get_logger().info("Tello conectado y pipeline de vídeo minimal iniciado.")
         except Exception as ex:
-            self._restaurar_logs()
-            self.get_logger().info(f"Error conexión: {ex}")
+            self.get_logger().warning(f"Error en iniciar_conexion: {ex}")
 
+    def _video_frame_handler(self, event, sender, data, **args):
+        if self._ffmpeg_proc and self._ffmpeg_proc.stdin:
+            self._ffmpeg_proc.stdin.write(data)
+
+
+    def _ffmpeg_stdout_reader(self):
+        """
+        Lee stdout de ffmpeg en chunks y ensambla JPEGs buscando SOI/EOI.
+        Cuando decodifica un JPEG con OpenCV, actualiza self.ultimo_frame.
+        """
+        try:
+            out = self._ffmpeg_proc.stdout
+            buf = self._stdout_buffer
+            while not self._stop_event.is_set():
+                chunk = out.read(READ_CHUNK)
+                if not chunk:
+                    time.sleep(0.005)
+                    continue
+                buf.extend(chunk)
+                # extraer JPEGs completos
+                while True:
+                    start = buf.find(b'\xff\xd8')
+                    if start < 0:
+                        break
+                    end = buf.find(b'\xff\xd9', start + 2)
+                    if end < 0:
+                        break
+                    jpg = bytes(buf[start:end+2])
+                    del buf[:end+2]
+                    # decodificar JPEG a BGR con OpenCV
+                    try:
+                        arr = np.frombuffer(jpg, dtype=np.uint8)
+                        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                        if img is None:
+                            continue
+                        # opcional: limitar tamaño para no saturar CPU (si lo deseas)
+                        # h, w = img.shape[:2]
+                        # if max(h, w) > 960:
+                        #     scale = 960 / float(max(h, w))
+                        #     img = cv2.resize(img, (int(w*scale), int(h*scale)))
+                        self.ultimo_frame = img
+                    except Exception:
+                        # ignorar JPEG corrupto en minimal
+                        continue
+        except Exception:
+            return
+
+    # ----------------- utilidades de seguridad para control -----------------
+    def _send_zero_rc(self):
+        """Intenta poner los sticks a cero (varias alternativas según API disponible)."""
+        try:
+            # preferir set_* si existen
+            try:
+                self.tello.set_roll(0)
+                self.tello.set_pitch(0)
+                self.tello.set_throttle(0)
+                self.tello.set_yaw(0)
+                return
+            except Exception:
+                pass
+            # fallback a comando 'rc'
+            try:
+                self.tello.send_command('rc 0 0 0 0')
+                return
+            except Exception:
+                pass
+            # último recurso
+            try:
+                self.tello.send_packet_data('rc 0 0 0 0')
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _cmd_watchdog_cb(self):
+        """
+        Si no hemos recibido comandos desde >0.5 s, enviar comandos neutros
+        para evitar movimiento persistente por orden anterior.
+        """
+        try:
+            if time.time() - getattr(self, '_last_cmd_time', 0.0) > 0.5:
+                self._send_zero_rc()
+        except Exception:
+            pass
 
     # ----------------- handlers de tellopy -----------------
     def _on_flight_data(self, event, sender, data, **args):
@@ -282,16 +239,6 @@ class NodoTelloPy(Node):
 
     def _on_log_data(self, event, sender, data, **args):
         self.ultimo_log = data
-
-    def _on_video_frame(self, event, sender, data, **args):
-        try:
-            frame = data
-            image_pil = frame.to_image()
-            np_img = np.array(image_pil)
-            frame_bgr = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
-            self.ultimo_frame = frame_bgr
-        except Exception:
-            pass
 
     # ----------------- publicación de imagen -----------------
     def _publicar_frame(self):
@@ -323,7 +270,6 @@ class NodoTelloPy(Node):
             self.publicador_imagen.publish(ros_image_msg)
         except Exception:
             return
-
 
     def _publicar_pose(self):
         msg = Float32MultiArray()
@@ -382,7 +328,6 @@ class NodoTelloPy(Node):
                     float(roll_deg), float(pitch_deg), float(yaw_deg)]
         self.publicador_pose.publish(msg)
 
-
     # ----------------- conversión quaternion -> euler (roll,pitch,yaw) -----------------
     def _quaternion_to_euler(self, w, x, y, z):
         sinr_cosp = 2.0 * (w * x + y * z)
@@ -400,6 +345,9 @@ class NodoTelloPy(Node):
 
     # ----------------- callback para recibir velocidades de control (con casos especiales) -----------------
     def callback_comandos_velocidad(self, msg: Float32MultiArray):
+        # actualizar hora del último comando recibido
+        self._last_cmd_time = time.time()
+
         # Intentamos leer cada componente; si falla, se queda en 0.0 (como en tu ejemplo antiguo)
         try:
             lr = float(msg.data[0])
@@ -439,6 +387,13 @@ class NodoTelloPy(Node):
             self.get_logger().info("Comando: takeoff")
             try:
                 self.tello.takeoff()
+                # después del takeoff, asegurar sticks a 0 varios ciclos
+                def _post_takeoff_zero():
+                    time.sleep(0.5)
+                    for _ in range(8):
+                        self._send_zero_rc()
+                        time.sleep(0.1)
+                threading.Thread(target=_post_takeoff_zero, daemon=True).start()
             except Exception:
                 pass
             return
@@ -447,6 +402,9 @@ class NodoTelloPy(Node):
         def _norm(v):
             try:
                 nv = float(v) / 100.0
+                # deadzone: ignorar ruidos pequeños
+                if abs(nv) < 0.05:
+                    return 0.0
                 if nv > 1.0:
                     nv = 1.0
                 if nv < -1.0:
@@ -485,6 +443,33 @@ class NodoTelloPy(Node):
         try:
             if self.timer_pose:
                 self.timer_pose.cancel()
+        except Exception:
+            pass
+
+        # cancelar watchdog
+        try:
+            if getattr(self, '_cmd_watchdog', None):
+                try:
+                    self._cmd_watchdog.cancel()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # parar threads y ffmpeg
+        try:
+            self._stop_event.set()
+            if self._ffmpeg_proc:
+                try:
+                    if self._ffmpeg_proc.stdin:
+                        self._ffmpeg_proc.stdin.close()
+                except Exception:
+                    pass
+                try:
+                    if self._ffmpeg_proc.poll() is None:
+                        self._ffmpeg_proc.kill()
+                except Exception:
+                    pass
         except Exception:
             pass
 
