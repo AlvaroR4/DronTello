@@ -19,10 +19,10 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
 
 # Tópicos
-ROS_TOPIC_IMAGEN_RAW_INPUT = 'camera/image_raw'
+ROS_TOPIC_IMAGEN_RAW_INPUT = 'tello/imagen'
 ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
 ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
-ROS_TOPIC_POSE_DRON = '/tello/pose'           # ahora recibimos la pose del dron aquí
+ROS_TOPIC_POSE_DRON = '/tello/pose'
 ROS_TOPIC_PUNTO = '/punto'
 ROS_TOPIC_PUNTO_ANG = '/punto_y_angulo'
 
