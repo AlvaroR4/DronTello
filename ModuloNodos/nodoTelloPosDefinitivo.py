@@ -67,26 +67,26 @@ class Tello(Node):
         self.timer_pose = self.create_timer(0.1, self.publicar_pose)
 
         #SUSCRIPTORES PARA LEER DE LOS EVENTOS
-        self.latest_flight_data = None #datos del vuelo
-        self.latest_log_data = None #en este vienen mvo e imu
+        self.ultimo_flight = None #datos del vuelo
+        self.ultimo_log = None #en este vienen mvo e imu
         # suscriptores
         self.tello.set_loglevel(self.tello.LOG_ERROR) #para menos ruido
-        self.tello.subscribe(self.tello.EVENT_VIDEO_FRAME, self.video_handler)
-        self.tello.subscribe(self.tello.EVENT_FLIGHT_DATA, self.flight_data_handler)
-        self.tello.subscribe(self.tello.EVENT_LOG_DATA, self.log_data_handler)
+        self.tello.subscribe(self.tello.EVENT_VIDEO_FRAME, self.evento_video)
+        self.tello.subscribe(self.tello.EVENT_FLIGHT_DATA, self.evento_flight)
+        self.tello.subscribe(self.tello.EVENT_LOG_DATA, self.evento_log)
         
         # lector simple de stdout (ensambla JPEGs)
         self._reader = threading.Thread(target=self._read_stdout_loop, daemon=True)
         self._reader.start()
         self.get_logger().info('Inicio')
 
-    def flight_data_handler(self, event, sender, data, **args):
-        self.latest_flight_data = data
+    def evento_flight(self, event, sender, data, **args):
+        self.ultimo_flight = data
 
-    def log_data_handler(self, event, sender, data, **args):
-        self.latest_log_data = data
+    def evento_log(self, event, sender, data, **args):
+        self.ultimo_log = data
         
-    def video_handler(self, event, sender, data):
+    def evento_video(self, event, sender, data):
         if self.ffmpeg and self.ffmpeg.stdin:
             self.ffmpeg.stdin.write(data)
 
@@ -150,8 +150,8 @@ class Tello(Node):
         pitch_deg = 0.0
         yaw_deg = 0.0
 
-        if self.latest_flight_data is not None:
-            raw_alt = getattr(self.latest_flight_data, 'height', 0.0) or 0.0
+        if self.ultimo_flight is not None:
+            raw_alt = getattr(self.ultimo_flight, 'height', 0.0) or 0.0
             altura_altimetro = float(raw_alt)
 
         if self.ultimo_log is not None:
@@ -228,3 +228,24 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+
+"""
+EJEMPLO PARA SEPARAR EL TRABAJO DE LOS NODOS ROS2 CON HILOS
+from rclpy.executors import MultiThreadedExecutor
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = Tello()
+    executor = MultiThreadedExecutor(num_threads=4)
+    try:
+        executor.add_node(node)
+        executor.spin()
+    except KeyboardInterrupt:
+        ...
+    finally:
+        executor.remove_node(node)
+        node.destroy_node()
+        rclpy.shutdown()
+
+"""
