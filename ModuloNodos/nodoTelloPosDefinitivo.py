@@ -122,23 +122,43 @@ class Tello(Node):
 
     def comandos_velocidad(self, msg: Float32MultiArray):
         #recibir velocidad de cada eje
-        lr = float(msg.data[0])
-        fb = float(msg.data[1])
-        ud = float(msg.data[2])
-        yv = float(msg.data[3])
+        lr = int(msg.data[0])
+        fb = int(msg.data[1])
+        ud = int(msg.data[2])
+        yv = int(msg.data[3])
 
         #comandos especiales
-        if lr == 2.0 and fb == 0.0 and ud == 0.0:
+        if lr == 2 and fb == 0 and ud == 0:
             self.get_logger().info("Comando: land")
             self.tello.land()
-        elif lr == 2.0 and fb == 2.0 and ud == 0.0:
+        elif lr == 2 and fb == 2 and ud == 0:
             self.get_logger().info("Comando: emergency")
             self.tello.emergency()
-        elif lr == 2.0 and fb == 2.0 and ud == 2.0:
+        elif lr == 2 and fb == 2 and ud == 2:
             self.get_logger().info("Comando: takeoff")
             self.tello.takeoff()
+        
+        #comandos velocidad
+        if lr > 0:
+            self.tello.right(lr)
+        else:
+            self.tello.left(abs(lr))
+    
+        if fb > 0:
+            self.tello.forward(fb)
+        else:
+            self.tello.backward(abs(fb))
+    
+        if ud > 0:
+            self.tello.up(ud_speed)
+        else:
+            self.tello.down(abs(ud))
+    
+        if yv > 0:
+            self.tello.clockwise(yv)
+        else:
+            self.tello.counter_clockwise(abs(yv))
 
-        #AÑADIR FUNCION PARA MANDAR VELOCIDAD A CADA EJE
     def publicar_pose(self):
         #[altura_altimetro, posx, posy, posz, roll_deg, pitch_deg, yaw_deg]
         msg = Float32MultiArray()
