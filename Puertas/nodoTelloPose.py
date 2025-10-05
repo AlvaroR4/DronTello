@@ -150,7 +150,7 @@ class Tello(Node):
             self.tello.backward(abs(fb))
     
         if ud > 0:
-            self.tello.up(ud_speed)
+            self.tello.up(ud)
         else:
             self.tello.down(abs(ud))
     
