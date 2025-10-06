@@ -6,7 +6,7 @@ import threading
 import traceback
 
 # Tópicos
-TOPIC_TELLO_POS_IN = '/tello/posicion'         # [altura, x, y, z, (roll_deg, pitch_deg, yaw_deg)]
+TOPIC_TELLO_POS_IN = '/tello/pose'         # [altura, x, y, z, (roll_deg, pitch_deg, yaw_deg)]
 TOPIC_POSE_OUT = '/tello/pose_corregida'          # publica: [x_corr, y_corr, z_corr, roll_deg, pitch_deg, yaw_deg]
 TOPIC_RESET_OFFSET = '/tello/pose_angles/reset'  
 
