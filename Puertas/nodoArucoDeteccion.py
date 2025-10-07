@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Nodo de Localización adaptado para recibir la pose desde /tello/pose (drone)
-y usar detección de ArUco para obtener rápidamente el punto central (para pruebas).
-Basado en nodoImagenPuertas6.py.
-"""
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
@@ -125,7 +118,7 @@ class ModuloLocalizacion(Node):
 
     def callback_pose(self, msg: Float32MultiArray):
         """
-        Espera: msg.data = [x, y, z, roll_deg, pitch_deg, yaw_deg] (flexible)
+        Espera: msg.data = [x, y, z, roll_deg, pitch_deg, yaw_deg]
         """
         try:
             data = list(msg.data)
@@ -307,7 +300,7 @@ class ModuloLocalizacion(Node):
 
     def estimar_distancia(self, alto_puerta_px):
         # helper (no usado directamente en ArUco pero lo dejamos)
-        distancia_mts = (0.285 * FOCAL) / alto_puerta_px if alto_puerta_px != 0 else None
+        distancia_mts = (0.175 * FOCAL) / alto_puerta_px if alto_puerta_px != 0 else None
         return distancia_mts
 
     def log_datos(self):

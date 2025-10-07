@@ -173,6 +173,7 @@ class Tello(Node):
         if self.ultimo_flight is not None:
             raw_alt = getattr(self.ultimo_flight, 'height', 0.0) or 0.0
             altura_altimetro = float(raw_alt)
+            altura_altimetro = altura_altimetro*0.1
 
         if self.ultimo_log is not None:
             log = self.ultimo_log
