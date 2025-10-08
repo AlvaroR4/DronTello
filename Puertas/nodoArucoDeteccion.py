@@ -20,8 +20,8 @@ ROS_TOPIC_PUNTO = '/punto'
 ROS_TOPIC_PUNTO_ANG = '/punto_y_angulo'
 
 # Dimensiones de procesamiento
-ANCHO_IMAGEN = 640
-ALTO_IMAGEN = 480
+ANCHO_IMAGEN = 960
+ALTO_IMAGEN = 720
 
 # ArUco params (ajusta MARKER_SIZE y FOCAL_PIXELS si hace falta)
 ARUCO_DICT = cv2.aruco.DICT_5X5_250
@@ -206,8 +206,12 @@ class ModuloLocalizacion(Node):
                         coordenada_Y = dist_m * math.cos(angulo_vertical_rad) * math.sin(angulo_horizontal_rad)
                         coordenada_X = dist_m * math.cos(angulo_vertical_rad) * math.cos(angulo_horizontal_rad)
 
+                        punto_transformar = (coordenada_X, coordenada_Y, coordenada_Z)
+                        angulos = (self.roll, self.pitch, self.yaw)
                         punto_cuerpo = [coordenada_X, coordenada_Y, coordenada_Z]
-                        punto_mundo = self.punto_cuerpo_a_mundo(self.roll, self.pitch, self.yaw, self.pos_dron_mundo, punto_cuerpo)
+
+                        punto_mundo = self.punto_cuerpo_a_mundo2(punto_transformar,self.pos_dron_mundo, angulos )
+                        #punto_mundo = self.punto_cuerpo_a_mundo(self.roll, self.pitch, self.yaw, self.pos_dron_mundo, punto_cuerpo)
 
                         # publicar punto y punto+angulo (para pruebas usemos yaw como angulo)
                         self.distancia_estimada = dist_m
@@ -290,6 +294,48 @@ class ModuloLocalizacion(Node):
         punto_mundo = pos_dron_mundo + R @ punto_cuerpo
 
         return punto_mundo
+    
+    def punto_cuerpo_a_mundo2(point_fr, drone_pos, angles_deg):
+
+        # convertir a arrays
+        p_fr = np.asarray(point_fr, dtype=float).reshape(3,)
+        t_w = np.asarray(drone_pos, dtype=float).reshape(3,)
+        roll, pitch, yaw = np.deg2rad(angles_deg)  # a radianes
+
+        # Rotaciones elementales (convención extrínseca/evaluada como R = Rz(psi) Ry(theta) Rx(phi))
+        cr = np.cos(roll); sr = np.sin(roll)
+        cp = np.cos(pitch); sp = np.sin(pitch)
+        cy = np.cos(yaw);   sy = np.sin(yaw)
+
+        R_x = np.array([[1,  0,   0],
+                        [0, cr, -sr],
+                        [0, sr,  cr]])
+        R_y = np.array([[ cp, 0, sp],
+                        [  0, 1,  0],
+                        [-sp, 0, cp]])
+        R_z = np.array([[cy, -sy, 0],
+                        [sy,  cy, 0],
+                        [ 0,   0, 1]])
+
+        # Rotación cuerpo(FLU) -> mundo(FLU) usando ZYX:
+        R_bodyFLU_to_worldFLU = R_z @ R_y @ R_x
+
+        # Matrices de cambio de convención de ejes:
+        # S1: convierte vector de FRD (x forward, y right, z down) a FLU (x forward, y left, z up)
+        S1 = np.diag([1.0, -1.0, -1.0])
+
+        # S2: convierte de FLU (x forward, y left, z up) a target mundo FLD (x forward, y left, z down)
+        # (es decir, invierte z)
+        S2 = np.diag([1.0, 1.0, -1.0])
+
+        # Combinada: cuerpo(FRD) -> mundo(FLD)
+        R = S2 @ R_bodyFLU_to_worldFLU @ S1
+
+        # Transformación: p_w = t_w + R * p_fr
+        p_w = t_w + R.dot(p_fr)
+
+        return p_w
+
 
     def estimar_distancia(self, alto_puerta_px):
         # helper (no usado directamente en ArUco pero lo dejamos)
