@@ -1,3 +1,4 @@
+# nodoArucoDeteccion.py (versión actualizada con calibración y pose estimate)
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
@@ -15,28 +16,43 @@ from geometry_msgs.msg import PointStamped
 ROS_TOPIC_IMAGEN_RAW_INPUT = 'tello/imagen'
 ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
 ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
-ROS_TOPIC_POSE_DRON = '/tello/pose_corregida'
+ROS_TOPIC_POSE_DRON = '/tello/pose'
 ROS_TOPIC_PUNTO = '/punto'
 ROS_TOPIC_PUNTO_ANG = '/punto_y_angulo'
 
-# Dimensiones de procesamiento
-ANCHO_IMAGEN = 640
-ALTO_IMAGEN = 480
+# Dimensiones de procesamiento -> ajustadas a la calibración que has proporcionado
+ANCHO_IMAGEN = 960
+ALTO_IMAGEN = 720
 
-# ArUco params (ajusta MARKER_SIZE y FOCAL_PIXELS si hace falta)
+# ArUco params (ajusta MARKER_SIZE si hace falta)
 ARUCO_DICT = cv2.aruco.DICT_5X5_250
-MARKER_SIZE = 0.175     # tamaño del marcador en metros (ejemplo 17.5 cm)
-FOCAL_PIXELS = 617.0    # focal en píxeles (ajusta a tu cámara)
-
-# Campos de cámara / calibración aproximada (usados para angulos)
+MARKER_SIZE = 0.175     # tamaño del marcador en metros (17.5 cm ejemplo)
+# (NOTA: ya no usamos FOCAL_PIXELS para la estimación si usamos pose estimate; lo dejamos por compatibilidad)
+FOCAL_PIXELS = 617.0
 FOCAL = FOCAL_PIXELS
 FOV_H = 67.2
 FOV_V = 52.3
 
+# --- Parámetros de calibración (tu cámara) ---
+CAM_FX = 900.1766
+CAM_FY = 894.8176
+CAM_CX = 481.5253
+CAM_CY = 371.0677
+
+CAM_K1 = 0.089014
+CAM_K2 = -1.546625
+CAM_P1 = 0.002167
+CAM_P2 = 0.004498
+CAM_K3 = 6.561574
+
+# Suavizado para reducir saltos (opcional)
+SMOOTHING_ENABLED = True
+SMOOTH_ALPHA = 0.6  # 0=no suavizado (usar valor cercano a 1 para respuesta rápida)
+
 class ModuloLocalizacion(Node):
     def __init__(self):
         super().__init__('modulo_localizacion_aruco')
-        self.get_logger().info("Iniciando Módulo de Localización (ArUco).")
+        self.get_logger().info("Iniciando Módulo de Localización (ArUco) - versión calibrada.")
         self.bridge = CvBridge()
 
         # Pose del dron (vendrá del nodo tello)
@@ -52,6 +68,9 @@ class ModuloLocalizacion(Node):
         self.coordenada_Y = None
         self.coordenada_Z = None
         self.punto_mundo = None
+
+        # para suavizado (coordenadas en ejes cuerpo)
+        self._prev_punto_cuerpo = None
 
         # publicadores
         self.publisher_ = self.create_publisher(PointStamped, ROS_TOPIC_PUNTO, 10)
@@ -70,7 +89,6 @@ class ModuloLocalizacion(Node):
         )
         self.get_logger().info(f"Suscrito a imagen RAW en: {ROS_TOPIC_IMAGEN_RAW_INPUT}")
 
-        # suscripción a la pose del dron (la publicará el nodo tello que creamos antes)
         qos_profile_pose = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -84,7 +102,6 @@ class ModuloLocalizacion(Node):
         )
         self.get_logger().info(f"Suscrito a la pose del dron en: {ROS_TOPIC_POSE_DRON}")
 
-        # publicadores de detección y visualización
         qos_profile_pub_data = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -103,8 +120,19 @@ class ModuloLocalizacion(Node):
             Image, ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT, qos_profile_pub_img)
         self.get_logger().info(f"Publicando imagen de visualización en: {ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT}")
 
+        # ArUco
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(ARUCO_DICT)
-        self.aruco_params = cv2.aruco.DetectorParameters()
+        # DetectorParameters (compatibilidad con distintas versiones)
+        try:
+            self.aruco_params = cv2.aruco.DetectorParameters_create()
+        except AttributeError:
+            self.aruco_params = cv2.aruco.DetectorParameters()
+
+        # Matriz intrínseca y distorsión (según calibración proporcionada)
+        self.camera_matrix = np.array([[CAM_FX, 0.0, CAM_CX],
+                                       [0.0, CAM_FY, CAM_CY],
+                                       [0.0, 0.0, 1.0]], dtype=np.float64)
+        self.dist_coeffs = np.array([CAM_K1, CAM_K2, CAM_P1, CAM_P2, CAM_K3], dtype=np.float64)
 
         # timer informativo opcional
         self.timer_log = self.create_timer(3.0, self.log_datos)
@@ -140,6 +168,7 @@ class ModuloLocalizacion(Node):
             return
 
         try:
+            # Redimensionamos a la resolución de calibración (si hace falta)
             img_procesamiento = cv2.resize(frame_bgr_raw, (ANCHO_IMAGEN, ALTO_IMAGEN))
             img_gray = cv2.cvtColor(img_procesamiento, cv2.COLOR_BGR2GRAY)
 
@@ -148,6 +177,17 @@ class ModuloLocalizacion(Node):
 
             img_out = img_procesamiento.copy()
             puertas_detectadas = []
+
+            # Intentar estimar pose mediante OpenCV si hay detecciones
+            pose_rvecs = None
+            pose_tvecs = None
+            if ids is not None and len(ids) > 0:
+                try:
+                    # corners tiene forma (N,1,4,2) o lista; estimatePoseSingleMarkers acepta corners
+                    pose_rvecs, pose_tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(corners, MARKER_SIZE, self.camera_matrix, self.dist_coeffs)
+                    # pose_tvecs: (N,1,3) -> vector traslación en coordenadas de cámara (x right, y down, z forward)
+                except Exception:
+                    pose_rvecs, pose_tvecs = None, None
 
             if ids is not None and len(ids) > 0:
                 # procesamos cada marcador detectado
@@ -166,12 +206,37 @@ class ModuloLocalizacion(Node):
                     # centro del marcador en imagen (px)
                     cx = int(np.mean(pts[:,0])); cy = int(np.mean(pts[:,1]))
 
-                    # Estimación de distancia (m) usando tamaño conocido del marcador y focal aproximada
-                    # dist_m = (MARKER_SIZE * FOCAL_PIXELS) / side_px
-                    if side_px > 0.0:
-                        dist_m = (MARKER_SIZE * FOCAL) / side_px
+                    # Si tenemos pose estimada con calibración, la usamos
+                    if pose_tvecs is not None:
+                        tvec_cam = pose_tvecs[i].reshape(3,)  # [x_cam, y_cam, z_cam] en sistema cámara (x right, y down, z forward)
+                        # distancia real (norma)
+                        dist_m = float(np.linalg.norm(tvec_cam))
+                        # Convertir de coordenadas cámara -> cuerpo (tu convención: +X adelante, +Y derecha, +Z abajo)
+                        # OpenCV camera: x_right, y_down, z_forward
+                        coordenada_X = float(tvec_cam[2])   # z_cam -> X_body (adelante)
+                        coordenada_Y = float(tvec_cam[0])   # x_cam -> Y_body (derecha)
+                        coordenada_Z = float(tvec_cam[1])   # y_cam -> Z_body (abajo)
                     else:
-                        dist_m = None
+                        # Fallback: estimación por tamaño y FOV (como en versión original)
+                        if side_px > 0.0:
+                            dist_m = (MARKER_SIZE * FOCAL) / side_px
+                        else:
+                            dist_m = None
+
+                        if dist_m is not None:
+                            # convertimos la detección en coordenadas (X,Y,Z) en cuerpo (FRD) usando FOV aproximado
+                            fov_horizontal_rad = math.radians(FOV_H)
+                            fov_vertical_rad = math.radians(FOV_V)
+                            nx = (cx - ANCHO_IMAGEN / 2) / (ANCHO_IMAGEN / 2)
+                            ny = -(cy - ALTO_IMAGEN / 2) / (ALTO_IMAGEN / 2)
+                            angulo_horizontal_rad = nx * (fov_horizontal_rad / 2)
+                            angulo_vertical_rad = ny * (fov_vertical_rad / 2)
+
+                            coordenada_Z = -dist_m * math.sin(angulo_vertical_rad)
+                            coordenada_Y = dist_m * math.cos(angulo_vertical_rad) * math.sin(angulo_horizontal_rad)
+                            coordenada_X = dist_m * math.cos(angulo_vertical_rad) * math.cos(angulo_horizontal_rad)
+                        else:
+                            coordenada_X = None; coordenada_Y = None; coordenada_Z = None
 
                     # Dibujos en imagen
                     x_min = int(np.min(pts[:,0])); x_max = int(np.max(pts[:,0]))
@@ -181,7 +246,6 @@ class ModuloLocalizacion(Node):
                     if dist_m is not None:
                         cv2.putText(img_out, f"ID:{ids[i].item()} Dist:{dist_m:.2f}m",(x_min, max(y_min-8,0)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,0), 2)
 
-                    # construir "puerta" detectada (ahora marcador)
                     marcador = {
                         'x_centro': cx,
                         'y_centro': cy,
@@ -191,45 +255,48 @@ class ModuloLocalizacion(Node):
                     }
                     puertas_detectadas.append(marcador)
 
-                    # calcular coordenadas en sistema cuerpo y luego mundo usando la pose del dron
-                    if dist_m is not None:
-                        # convertimos la detección en coordenadas (X,Y,Z) en cuerpo (FRD)
-                        # misma lógica que antes usando FOV y posición en imagen
-                        fov_horizontal_rad = math.radians(FOV_H)
-                        fov_vertical_rad = math.radians(FOV_V)
-                        nx = (cx - ANCHO_IMAGEN / 2) / (ANCHO_IMAGEN / 2)
-                        ny = -(cy - ALTO_IMAGEN / 2) / (ALTO_IMAGEN / 2)
-                        angulo_horizontal_rad = nx * (fov_horizontal_rad / 2)
-                        angulo_vertical_rad = ny * (fov_vertical_rad / 2)
-
-                        coordenada_Z = -dist_m * math.sin(angulo_vertical_rad)
-                        coordenada_Y = dist_m * math.cos(angulo_vertical_rad) * math.sin(angulo_horizontal_rad)
-                        coordenada_X = dist_m * math.cos(angulo_vertical_rad) * math.cos(angulo_horizontal_rad)
-
+                    # construir punto en ejes cuerpo
+                    if coordenada_X is not None and coordenada_Y is not None and coordenada_Z is not None:
                         punto_cuerpo = [coordenada_X, coordenada_Y, coordenada_Z]
-                        punto_mundo = self.punto_cuerpo_a_mundo(self.roll, self.pitch, self.yaw, self.pos_dron_mundo, punto_cuerpo)
 
-                        # publicar punto y punto+angulo (para pruebas usemos yaw como angulo)
+                        # Suavizado simple (exponencial) para reducir saltos (opcional)
+                        if SMOOTHING_ENABLED:
+                            if self._prev_punto_cuerpo is None:
+                                smooth_p = np.array(punto_cuerpo, dtype=float)
+                            else:
+                                smooth_p = SMOOTH_ALPHA * np.array(punto_cuerpo, dtype=float) + (1.0 - SMOOTH_ALPHA) * np.array(self._prev_punto_cuerpo, dtype=float)
+                            self._prev_punto_cuerpo = smooth_p
+                            punto_cuerpo_pub = smooth_p.tolist()
+                        else:
+                            punto_cuerpo_pub = punto_cuerpo
+                            self._prev_punto_cuerpo = punto_cuerpo
+
+                        # Transformar a mundo usando la pose del dron
+                        punto_mundo = self.punto_cuerpo_a_mundo(self.roll, self.pitch, self.yaw, self.pos_dron_mundo, punto_cuerpo_pub)
+
+                        # actualizar variables internas
                         self.distancia_estimada = dist_m
-                        self.coordenada_X = coordenada_X
-                        self.coordenada_Y = coordenada_Y
-                        self.coordenada_Z = coordenada_Z
+                        self.coordenada_X = float(punto_cuerpo_pub[0])
+                        self.coordenada_Y = float(punto_cuerpo_pub[1])
+                        self.coordenada_Z = float(punto_cuerpo_pub[2])
                         self.punto_mundo = punto_mundo
                         angulo = float(self.yaw)  # no usamos orientación del marcador por ahora
+
+                        # Publicar: (mantengo la llamada como en tu versión original)
+                        # publicar_punto recibe un vector de 3 elementos; el código original la llamaba con punto_cuerpo
                         self.publicar_punto(punto_mundo)
                         self.publicar_punto_a(punto_mundo[0], punto_mundo[1], punto_mundo[2], angulo)
 
-            # Publicar datos de detectados: cantidad y (x,y,ancho,alto) por cada uno (similar formato antiguo)
+            # Publicar datos de detectados: cantidad y (x,y,ancho,alto) por cada uno
             msg_puertas = Float32MultiArray()
             data_to_publish = [float(len(puertas_detectadas))]
             for marcador in puertas_detectadas:
-                # para mantener compatibilidad: usaremos side_px como ancho/alto aproximado
                 data_to_publish.extend([float(marcador['x_centro']), float(marcador['y_centro']),
                                         float(marcador['side_px']), float(marcador['side_px'])])
             msg_puertas.data = data_to_publish
             self.publicador_puertas_detectadas.publish(msg_puertas)
 
-            # publicar imagen con dibujos
+            # publicar imagen con dibujos (observa que la conversión de color y encoding se mantiene como antes)
             try:
                 img_publish_rgb = cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB)
                 ros_image_msg_out = self.bridge.cv2_to_imgmsg(img_publish_rgb, encoding="bgr8")
@@ -245,6 +312,8 @@ class ModuloLocalizacion(Node):
             self.get_logger().error("Error en callback_procesamiento_imagen:\n" + traceback.format_exc())
 
     def publicar_punto(self, punto_mundo):
+        # Nota: la función mantiene el nombre original. En la versión original se
+        # llamaba con punto_cuerpo para depuración; mantengo comportamiento similar.
         msg = PointStamped()
         msg.header.frame_id = 'map'
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -259,7 +328,8 @@ class ModuloLocalizacion(Node):
         self.pub_punto_a.publish(msg)
 
     def punto_cuerpo_a_mundo(self, roll_deg, pitch_deg, yaw_deg, pos_dron_mundo, punto_cuerpo):
-        # Transformación como en tu versión anterior (FRD -> mundo)
+        # Transformación: FRD(body) -> mundo
+        # roll,pitch,yaw en grados (asumimos misma convención que antes)
         roll = np.deg2rad(roll_deg)
         pitch = np.deg2rad(pitch_deg)
         yaw = np.deg2rad(yaw_deg)
@@ -282,7 +352,12 @@ class ModuloLocalizacion(Node):
             [0, 0, 1]
         ])
 
-        S = np.diag([1, -1, -1])
+        # Ahora S debe convertir de ejes BODY (+X adelante, +Y derecha, +Z abajo)
+        # a ejes MUNDO (+X adelante, +Y izquierda, +Z abajo).
+        # Por tanto invertimos Y solamente:
+        S = np.diag([1, -1, 1])
+
+        # Composición de rotaciones: R = Rz * Ry * Rx * S
         R = R_z @ R_y @ R_x @ S
 
         punto_cuerpo = np.array(punto_cuerpo).reshape(3,)
