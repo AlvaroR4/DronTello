@@ -6,7 +6,7 @@ import threading
 import traceback
 
 # Tópicos
-TOPIC_TELLO_POS_IN = '/tello/posicion'         # [altura, x, y, z, (roll_deg, pitch_deg, yaw_deg)]
+TOPIC_TELLO_POS_IN = '/tello/pose'         # [altura, x, y, z, (roll_deg, pitch_deg, yaw_deg)]
 TOPIC_POSE_OUT = '/tello/pose_corregida'          # publica: [x_corr, y_corr, z_corr, roll_deg, pitch_deg, yaw_deg]
 TOPIC_RESET_OFFSET = '/tello/pose_angles/reset'  
 
@@ -88,7 +88,7 @@ class NodoIntermedioPose(Node):
 
             if len(data) >= 4:
                 # data[0]=altura, data[1]=x, data[2]=y, data[3]=z
-                altura = float(data[0])
+                self.altura_origen = float(data[0])
                 x = float(data[1])
                 y = float(data[2])
                 z = float(data[3])
@@ -107,7 +107,7 @@ class NodoIntermedioPose(Node):
             elif len(data) >= 5:
                 yaw = float(data[4])
 
-            self.offset_pos = [x, y, altura]
+            self.offset_pos = [x, y, z]
             self.offset_angles = [roll, pitch, yaw]
             self.origin_fijado = True
             self.get_logger().info(f"Origen fijado (0,0,0). Offset guardado: pos={self.offset_pos}, angles={self.offset_angles}")
@@ -154,7 +154,7 @@ class NodoIntermedioPose(Node):
             if self.origin_fijado:
                 x_corr = x - self.offset_pos[0]
                 y_corr = y - self.offset_pos[1]
-                z_corr = z - self.offset_pos[2]
+                z_corr = z - self.offset_pos[2] -self.altura_origen
                 roll_corr = roll - self.offset_angles[0]
                 pitch_corr = pitch - self.offset_angles[1]
                 yaw_corr = yaw - self.offset_angles[2]
