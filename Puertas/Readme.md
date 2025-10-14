@@ -12,19 +12,20 @@
 
 
 
-cd ~/DronTello/Puertras
+cd ~/DronTello/Puertas
 source ~/telloPos/bin/activate
 python3 nodoTelloPose.py
 
-cd ~/DronTello/Puertras
+cd ~/DronTello/Puertas
 source ~/tello/bin/activate
 python3 nodoIntermedioPose.py
 
-cd ~/DronTello/Puertras
+cd ~/DronTello/Puertas
 source ~/tello/bin/activate
 python3 nodoArucoDeteccion.py
 
-cd ~/DronTello/Puertras
+cd ~/DronTello/Puertas
 source ~/tello/bin/activate
 python3 nodoDeteccion.py
+
 
