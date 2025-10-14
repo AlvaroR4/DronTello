@@ -1,31 +1,30 @@
--nodoImagenPuertas:
-    Este nodo se encarga de, recibiendo la imagen original, aplicar los filtros de color y calcular las posibles puertas
-    en base a los puntos detectados.
-    
-    Recibe el topic /tello/imagen que es la imagen original sin procesar
-    Devuelve el topic /tello/puertas_detectadas , siendo las puertas del tipo:
-        puerta_detectada = {
-                    'x_centro': x_centro_puerta,
-                    'y_centro': y_centro_puerta,
-                    'ancho': ancho_puerta,
-                    'alto': alto_puerta
-                }
-
-        También devuelve la imagen modificada con las puertas dibujadas en el topic /tello/imagen_puertas
-
-
-
--nodoImagenPuertas: calcula ángulo de la puerta y distancia
-
--nodoImagenPuertas3: calcula posicion del centro de la puerta en ejes cuerpo
-
--nodoImagenPuertas4: transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo (sin leer de ORB-SLAM3)
-
--nodoImagenPuertas4R: transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo (sin leer de ORB-SLAM3)
-                      visualización en Rviz, y nueva lógica de alto y ancho
-
 -nodoImagenPuertas5(nodoDeteccion): transforma el punto del centro de la puerta, de ejes cuerpo a ejes mundo
 
 -nodoImagenPuertas6(nodoDeteccion2): igual que el 5, pero esta vez sabiendo que publica la pose el dron y sin cuaterniones
 
 -nodoArucoDeteccion: en vez de detectar puntos naranjas, detecta el aruco como la puerta
+
+-nodoTrayectoria: Dado un punto y un angulo, calcula otros 2 puntos mas y las velocidades necesarias para navegar
+
+-nodoIntermedioPose: Recibe la pose del dron y la publica teniendo en cuenta el error inicial
+
+-nodoTelloPose: El unico que habla y escucha al dron 
+
+
+
+cd ~/DronTello/Puertras
+source ~/telloPos/bin/activate
+python3 nodoTelloPose.py
+
+cd ~/DronTello/Puertras
+source ~/tello/bin/activate
+python3 nodoIntermedioPose.py
+
+cd ~/DronTello/Puertras
+source ~/tello/bin/activate
+python3 nodoArucoDeteccion.py
+
+cd ~/DronTello/Puertras
+source ~/tello/bin/activate
+python3 nodoDeteccion.py
+
