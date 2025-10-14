@@ -18,15 +18,19 @@ ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
 ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
 ROS_TOPIC_POSE_ANGLES = '/tello/pose_corregida'
 
-# Dimensiones de procesamiento de la imagen
-ANCHO_IMAGEN = 640
-ALTO_IMAGEN = 480
+ANCHO_IMAGEN = 960
+ALTO_IMAGEN = 720
 
-# Rangos HSV (configurable)
+#Naranja
 COLOR_MIN = np.array([0, 191, 63])
 COLOR_MAX = np.array([10, 255, 142])
+#Amarillo
+#COLOR_MIN = np.array([20, 230, 100])  
+#COLOR_MAX = np.array([35, 255, 255])
+#Verde
+#COLOR_MIN = np.array([45, 120, 80])
+#COLOR_MAX = np.array([75, 255, 255])
 
-# Área mínima de un contorno para ser considerado una esquina
 MIN_CORNER_AREA = 100
 
 ALTO_REAL = 0.285
@@ -41,7 +45,6 @@ class ModuloLocalizacion(Node):
         self.get_logger().info("Iniciando Módulo de Localización (Detección de Puertas).")
         self.bridge = CvBridge()
 
-        # temporizador que se ejecuta cada 3 segundos
         self.timer_log = self.create_timer(3.0, self.log_datos)
         self.distancia_estimada = None
         self.distancia_calculada = None
@@ -53,7 +56,6 @@ class ModuloLocalizacion(Node):
         self.publisher_ = self.create_publisher(PointStamped, '/punto', 10)
         self.pub_punto_a = self.create_publisher(Float32MultiArray, '/punto_y_angulo', 10)
 
-        # Suscriptor para la imagen RAW
         qos_profile_sub = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
@@ -67,7 +69,6 @@ class ModuloLocalizacion(Node):
         )
         self.get_logger().info(f"Suscrito a imagen RAW en: {ROS_TOPIC_IMAGEN_RAW_INPUT}")
 
-        # Suscriptor al tópico /tello/pose_angles (Float32MultiArray)
         qos_profile_pose = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -81,13 +82,11 @@ class ModuloLocalizacion(Node):
         )
         self.get_logger().info(f"Suscrito a la pose (ángulos) del dron en: {ROS_TOPIC_POSE_ANGLES}")
 
-        # Inicializamos variables de pose
         self.pos_dron_mundo = [0.0, 0.0, 0.0]
         self.roll = 0.0
         self.pitch = 0.0
         self.yaw = 0.0
 
-        # Publicadores
         qos_profile_pub_data = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -113,18 +112,11 @@ class ModuloLocalizacion(Node):
         self.pub_punto_a.publish(msg)
 
     def callback_pose(self, msg: Float32MultiArray):
-        """
-        Espera: msg.data = [x, y, z, roll_deg, pitch_deg, yaw_deg]
-        Si no existen los ángulos, se asumen 0.
-        """
         try:
             data = list(msg.data)
             if len(data) < 3:
                 self.get_logger().warning("Mensaje de pose con datos insuficientes (<3). Ignorando.")
                 return
-
-            # Interpretación flexible: si el nodo intermedio publica [x,y,z,roll,pitch,yaw]
-            # o [x,y,z] (o el orden que use: aquí esperamos x,y,z en indices 0..2)
             x = float(data[0])
             y = float(data[1])
             z = float(data[2])
@@ -137,7 +129,6 @@ class ModuloLocalizacion(Node):
                 pitch = float(data[4])
                 yaw = float(data[5])
             elif len(data) >= 4:
-                # si solo vino 4 valores asumimos que son [x,y,z,yaw]
                 yaw = float(data[3])
 
             self.pos_dron_mundo = [x, y, z]
@@ -172,7 +163,6 @@ class ModuloLocalizacion(Node):
 
             puertas_detectadas, img_con_dibujos = self.algoritmoDetectarPuertas(img_hsv, img_procesamiento.copy())
 
-            # Publicar datos de las puertas detectadas
             msg_puertas = Float32MultiArray()
             data_to_publish = [float(len(puertas_detectadas))]
             for puerta in puertas_detectadas:
@@ -181,7 +171,6 @@ class ModuloLocalizacion(Node):
             msg_puertas.data = data_to_publish
             self.publicador_puertas_detectadas.publish(msg_puertas)
 
-            # Publicar imagen visualizada
             try:
                 img_publish_rgb = cv2.cvtColor(img_con_dibujos, cv2.COLOR_BGR2RGB)
                 ros_image_msg_out = self.bridge.cv2_to_imgmsg(img_publish_rgb, encoding="bgr8")
@@ -212,7 +201,6 @@ class ModuloLocalizacion(Node):
         return distancia_mts
 
     def punto_cuerpo_a_mundo(self, roll_deg, pitch_deg, yaw_deg, pos_dron_mundo, punto_cuerpo):
-        # Igual que antes: transforma punto del cuerpo (FRD) a sistema mundo (coincide con ejes que usabas)
         roll = np.deg2rad(roll_deg)
         pitch = np.deg2rad(pitch_deg)
         yaw = np.deg2rad(yaw_deg)
@@ -270,7 +258,6 @@ class ModuloLocalizacion(Node):
     def tratarPuerta(self, puntos_esquinas, img_visualizacion):
         puertas = []
 
-        # RECIBIR DATOS DE POSE desde self.pos_dron_mundo, self.roll, self.pitch, self.yaw
         roll = self.roll
         pitch = self.pitch
         yaw = self.yaw
