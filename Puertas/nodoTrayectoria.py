@@ -4,10 +4,8 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-# ==============================
-# Constantes de configuración
-# ==============================
 DIST_ANTES_M = 0.50
 DIST_DESPUES_M = 0.50
 ALTURA_SOBRE_PUNTO_M = 0.50
@@ -43,7 +41,13 @@ class NodoTrayectoria(Node):
         self.sub_pose = self.create_subscription(Float32MultiArray, '/tello/pose_corregida', self.callback_pose, 10)
         self.sub_datos = self.create_subscription(Float32MultiArray, '/tello/punto_y_angulo', self.callback_datos, 10)
         self.pub_vel = self.create_publisher(Float32MultiArray, '/tello/comandos_velocidad', 10)
-        self.pub_marcadores = self.create_publisher(MarkerArray, '/trayectoria_visual', 10)
+        qos_profile_marcadores = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1 
+        )
+        self.pub_marcadores = self.create_publisher(MarkerArray, '/trayectoria_visual', qos_profile_marcadores)
 
         self.timer = self.create_timer(1.0 / FRECUENCIA_HZ, self.bucle_control)
         self.get_logger().info("Nodo trayectoria iniciado. Esperando la primera puerta...")
@@ -99,9 +103,9 @@ class NodoTrayectoria(Node):
             marker.type = Marker.SPHERE
             marker.action = Marker.DELETE if borrar else Marker.ADD
             
-            marker.pose.position.x = punto[0]
-            marker.pose.position.y = punto[1]
-            marker.pose.position.z = punto[2]
+            marker.pose.position.x = float(punto[0])
+            marker.pose.position.y = float(punto[1])
+            marker.pose.position.z = float(punto[2])
             marker.pose.orientation.w = 1.0
 
             marker.scale.x, marker.scale.y, marker.scale.z = 0.1, 0.1, 0.1

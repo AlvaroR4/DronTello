@@ -28,7 +28,7 @@ ARUCO_DICT = cv2.aruco.DICT_5X5_250
 class NodoDeteccionAruco(Node):
     def __init__(self):
         super().__init__('nodo_deteccion_aruco')
-        self.get_logger().info("Iniciando el nodo de detección de ArUco.")
+        self.get_logger().info("Iniciando el nodo de detección con Aruco.")
 
         self.pos_dron_mundo = np.array([0.0, 0.0, 0.0])  # [x, y, z]
         self.roll = 0.0
@@ -55,7 +55,7 @@ class NodoDeteccionAruco(Node):
         self.pub_punto_angulo = self.create_publisher(Float32MultiArray, ROS_TOPIC_PUNTO_ANGULO_OUTPUT, 10)
         self.pub_imagen_debug = self.create_publisher(Image, ROS_TOPIC_IMAGEN_DEBUG_OUTPUT, 10)
 
-        self.get_logger().info("Nodo inicializado y listo.")
+        self.get_logger().info("Nodo listo.")
 
     def callback_pose(self, msg: Float32MultiArray):
         pose_data = list(msg.data)
@@ -93,7 +93,6 @@ class NodoDeteccionAruco(Node):
                 self.publicar_punto_mundo(punto_mundo, msg_imagen.header.stamp)
                 self.publicar_punto_y_angulo(punto_mundo, angulo_global_puerta)
                 
-                # --- CORRECCIÓN: Se pasa el ángulo a la función de dibujo ---
                 self.dibujar_info(frame_bgr, esquinas, ids[0], distancia, punto_mundo, angulo_global_puerta)
 
         try:
