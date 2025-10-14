@@ -16,7 +16,6 @@ K_YAW = 1.0
 VEL_MAX = 20
 TOL_POS_M = 0.10
 TOL_YAW_DEG = 5.0
-FRECUENCIA_HZ = 20.0
 
 def saturar(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -37,7 +36,6 @@ class NodoTrayectoria(Node):
         self.puntos_mision_actual = [] # Para guardar [P', P, P'']
         self.angulo_puerta_deg = 0.0
 
-        # --- Suscripciones y Publicaciones ---
         self.sub_pose = self.create_subscription(Float32MultiArray, '/tello/pose_corregida', self.callback_pose, 10)
         self.sub_datos = self.create_subscription(Float32MultiArray, '/tello/punto_y_angulo', self.callback_datos, 10)
         self.pub_vel = self.create_publisher(Float32MultiArray, '/tello/comandos_velocidad', 10)
@@ -49,8 +47,8 @@ class NodoTrayectoria(Node):
         )
         self.pub_marcadores = self.create_publisher(MarkerArray, '/trayectoria_visual', qos_profile_marcadores)
 
-        self.timer = self.create_timer(1.0 / FRECUENCIA_HZ, self.bucle_control)
-        self.get_logger().info("Nodo trayectoria iniciado. Esperando la primera puerta...")
+        self.timer = self.create_timer(1.0 / 20.0, self.bucle_control)
+        self.get_logger().info("Nodo trayectoria iniciado")
 
     def callback_pose(self, msg: Float32MultiArray):
         if len(msg.data) >= 6:
@@ -66,7 +64,7 @@ class NodoTrayectoria(Node):
 
         if not es_puerta_nueva: return
 
-        self.get_logger().info(f"¡Nueva puerta detectada en {punto_recibido}!")
+        self.get_logger().info(f"Nueva puerta detectada en {punto_recibido}")
         self.puertas_navegadas.append(punto_recibido)
         
         punto_p = punto_recibido
@@ -166,18 +164,18 @@ class NodoTrayectoria(Node):
         if estado_actual == 'IR_A_P_PRIMA':
             objetivo_actual = self.puntos_mision_actual[0]
             if self.controlar_posicion(objetivo_actual):
-                self.get_logger().info("Alcanzado P'. Rotando para alinear con la puerta...")
+                self.get_logger().info("Alcanzado P'. Rotando para alinear con la puerta")
                 self.estado = 'ROTAR_PARA_CRUZAR'
 
         elif estado_actual == 'ROTAR_PARA_CRUZAR':
             if self.controlar_rotacion(self.angulo_puerta_deg):
-                self.get_logger().info("Rotación completada. Cruzando la puerta...")
+                self.get_logger().info("Rotación completada. Cruzando la puerta")
                 self.estado = 'IR_A_P_DOBLE_PRIMA'
 
         elif estado_actual == 'IR_A_P_DOBLE_PRIMA':
             objetivo_actual = self.puntos_mision_actual[2]
             if self.controlar_posicion(objetivo_actual, yaw_objetivo_deg=self.angulo_puerta_deg):
-                self.get_logger().info("¡Puerta cruzada! Misión completada.")
+                self.get_logger().info("Puerta cruzada.")
                 self.estado = 'ESPERANDO_PUERTA'
                 self.mision_activa = False
                 self.detener_dron()
