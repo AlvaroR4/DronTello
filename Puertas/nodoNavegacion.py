@@ -17,7 +17,7 @@ UMBRAL_LLEGADA_POSICION_M = 0.10
 UMBRAL_LLEGADA_YAW_DEG = 5.0
 FRECUENCIA_CONTROL_HZ = 20.0
 
-def saturar(valor, maximo):
+def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
 
 def normalizar_angulo_deg(angulo):
@@ -62,7 +62,12 @@ class NodoNavegacion(Node):
             return
 
         punto_puerta_recibido = np.array(msg.data[0:3])
-        es_puerta_nueva = all(np.linalg.norm(punto_puerta_recibido - p) > UMBRAL_DISTANCIA_NUEVA_PUERTA_M for p in self.puertas_visitadas)
+        
+        es_puerta_nueva = True
+        for puerta_visitada in self.puertas_visitadas:
+            if np.linalg.norm(punto_puerta_recibido - puerta_visitada) < UMBRAL_DISTANCIA_NUEVA_PUERTA_M:
+                es_puerta_nueva = False
+                break
         
         if not es_puerta_nueva:
             return
@@ -76,6 +81,7 @@ class NodoNavegacion(Node):
 
         punto_central_puerta[2] -= MARGEN_ALTURA_M
         normal_plano_puerta = np.array([math.cos(angulo_objetivo_rad), math.sin(angulo_objetivo_rad), 0.0])
+        
         punto_aproximacion = punto_central_puerta - DISTANCIA_APROXIMACION_M * normal_plano_puerta
         punto_salida = punto_central_puerta + DISTANCIA_SALIDA_M * normal_plano_puerta
         self.puntos_trayectoria_actual = [punto_aproximacion, punto_central_puerta, punto_salida]
@@ -114,23 +120,18 @@ class NodoNavegacion(Node):
         error_posicion = punto_objetivo - self.posicion_dron_mundo
         distancia_al_objetivo = np.linalg.norm(error_posicion)
         
-        velocidad_en_ejes_mundo = GANANCIA_P_LINEAL * error_posicion
+        velocidad_deseada = GANANCIA_P_LINEAL * error_posicion
         
-        yaw_dron_rad = math.radians(self.yaw_dron_deg)
-        cos_yaw, sin_yaw = math.cos(-yaw_dron_rad), math.sin(-yaw_dron_rad)
-        matriz_rotacion = np.array([[cos_yaw, -sin_yaw, 0], [sin_yaw, cos_yaw, 0], [0, 0, 1]])
-        velocidad_en_ejes_cuerpo = matriz_rotacion @ velocidad_en_ejes_mundo
-
-        cmd_avance_atras = saturar(velocidad_en_ejes_cuerpo[0] * 100, VELOCIDAD_MAXIMA)
-        cmd_lateral      = saturar(velocidad_en_ejes_cuerpo[1] * 100, VELOCIDAD_MAXIMA)
-        cmd_vertical     = saturar(velocidad_en_ejes_cuerpo[2] * 100, VELOCIDAD_MAXIMA)
+        avance = rango_velocidad(velocidad_deseada[0] * 100, VELOCIDAD_MAXIMA)
+        lateral      = rango_velocidad(velocidad_deseada[1] * 100, VELOCIDAD_MAXIMA)
+        vertical     = rango_velocidad(velocidad_deseada[2] * 100, VELOCIDAD_MAXIMA)
         
         cmd_rotacion = 0
         if yaw_objetivo_deg is not None:
             error_yaw = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
-            cmd_rotacion = saturar(GANANCIA_P_YAW * error_yaw, VELOCIDAD_MAXIMA)
+            cmd_rotacion = rango_velocidad(GANANCIA_P_YAW * error_yaw, VELOCIDAD_MAXIMA)
 
-        self.enviar_comando_velocidad(cmd_lateral, cmd_avance_atras, cmd_vertical, cmd_rotacion)
+        self.enviar_comando_velocidad(lateral, avance, vertical, cmd_rotacion)
         return distancia_al_objetivo < UMBRAL_LLEGADA_POSICION_M
 
     def rotar_a_yaw(self, angulo_objetivo_deg):
@@ -140,7 +141,7 @@ class NodoNavegacion(Node):
             self.detener_dron()
             return True
         
-        cmd_rotacion = saturar(GANANCIA_P_YAW * error_yaw, VELOCIDAD_MAXIMA)
+        cmd_rotacion = rango_velocidad(GANANCIA_P_YAW * error_yaw, VELOCIDAD_MAXIMA)
         self.enviar_comando_velocidad(0, 0, 0, cmd_rotacion)
         return False
 
