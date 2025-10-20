@@ -9,13 +9,12 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 DISTANCIA_APROXIMACION_M = 0.50
 DISTANCIA_SALIDA_M = 0.50
 MARGEN_ALTURA_M = 0.50
-GANANCIA_P_LINEAL = 0.8
-GANANCIA_P_YAW = 1.0
+AUMENTAR_VELOCIDAD = 0.8
+AUMENTAR_YAW = 1.0
 VELOCIDAD_MAXIMA = 20
-UMBRAL_DISTANCIA_NUEVA_PUERTA_M = 1.0
-UMBRAL_LLEGADA_POSICION_M = 0.10
-UMBRAL_LLEGADA_YAW_DEG = 5.0
-FRECUENCIA_CONTROL_HZ = 20.0
+DISTANCIA_NUEVA_PUERTA_M = 1.0
+LLEGADA_POSICION_M = 0.10
+LLEGADA_YAW_DEG = 5.0
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -48,7 +47,7 @@ class NodoNavegacion(Node):
         )
         self.pub_marcadores = self.create_publisher(MarkerArray, '/trayectoria_visual', qos_marcadores)
 
-        self.timer_control = self.create_timer(1.0 / FRECUENCIA_CONTROL_HZ, self.bucle_de_control)
+        self.timer_control = self.create_timer(1.0 / 20.0, self.bucle_de_control)
         self.get_logger().info("Nodo de Navegación iniciado. Esperando detección de puertas.")
 
     def callback_pose_dron(self, msg: Float32MultiArray):
@@ -58,21 +57,22 @@ class NodoNavegacion(Node):
             self.pose_recibida = True
 
     def callback_nueva_puerta(self, msg: Float32MultiArray):
-        if len(msg.data) < 4 or self.mision_en_curso:
+        if len(msg.data) < 4:
             return
 
         punto_puerta_recibido = np.array(msg.data[0:3])
         
         es_puerta_nueva = True
         for puerta_visitada in self.puertas_visitadas:
-            if np.linalg.norm(punto_puerta_recibido - puerta_visitada) < UMBRAL_DISTANCIA_NUEVA_PUERTA_M:
+            #distancia euclidiana
+            if np.linalg.norm(punto_puerta_recibido - puerta_visitada) < DISTANCIA_NUEVA_PUERTA_M:
                 es_puerta_nueva = False
                 break
         
         if not es_puerta_nueva:
             return
 
-        self.get_logger().info(f"¡Nueva puerta objetivo detectada en {punto_puerta_recibido}!")
+        self.get_logger().info(f"Nueva puerta detectada en {punto_puerta_recibido}")
         self.puertas_visitadas.append(punto_puerta_recibido)
         
         punto_central_puerta = punto_puerta_recibido
@@ -99,18 +99,18 @@ class NodoNavegacion(Node):
         if self.estado_mision == 'IR_A_PUNTO_APROXIMACION':
             objetivo = self.puntos_trayectoria_actual[0]
             if self.ir_a_posicion(objetivo):
-                self.get_logger().info("Punto de aproximación alcanzado. Rotando para alinear...")
+                self.get_logger().info("Punto de aproximación alcanzado -> Rotando")
                 self.estado_mision = 'ROTAR_HACIA_PUERTA'
 
         elif self.estado_mision == 'ROTAR_HACIA_PUERTA':
             if self.rotar_a_yaw(self.angulo_objetivo_deg):
-                self.get_logger().info("Rotación completada. Cruzando la puerta...")
+                self.get_logger().info("Rotación completada -> Cruzando puerta")
                 self.estado_mision = 'IR_A_PUNTO_SALIDA'
 
         elif self.estado_mision == 'IR_A_PUNTO_SALIDA':
             objetivo = self.puntos_trayectoria_actual[2]
             if self.ir_a_posicion(objetivo, yaw_objetivo_deg=self.angulo_objetivo_deg):
-                self.get_logger().info("¡Puerta cruzada con éxito! Misión finalizada.")
+                self.get_logger().info("Puerta cruzada")
                 self.estado_mision = 'ESPERANDO_PUERTA'
                 self.mision_en_curso = False
                 self.detener_dron()
@@ -120,28 +120,30 @@ class NodoNavegacion(Node):
         error_posicion = punto_objetivo - self.posicion_dron_mundo
         distancia_al_objetivo = np.linalg.norm(error_posicion)
         
-        velocidad_deseada = GANANCIA_P_LINEAL * error_posicion
-        
+        velocidad_deseada = AUMENTAR_VELOCIDAD * error_posicion
+
+        #Ejes Mundo: +X (Adelante), +Y (Derecha), +Z (Abajo)
+        #Comandos Dron: avance (Adelante), lateral (Derecha), vertical (Arriba)
         avance = rango_velocidad(velocidad_deseada[0] * 100, VELOCIDAD_MAXIMA)
         lateral      = rango_velocidad(velocidad_deseada[1] * 100, VELOCIDAD_MAXIMA)
-        vertical     = rango_velocidad(velocidad_deseada[2] * 100, VELOCIDAD_MAXIMA)
+        vertical     = rango_velocidad(-velocidad_deseada[2] * 100, VELOCIDAD_MAXIMA)#comprobar signo
         
         cmd_rotacion = 0
         if yaw_objetivo_deg is not None:
             error_yaw = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
-            cmd_rotacion = rango_velocidad(GANANCIA_P_YAW * error_yaw, VELOCIDAD_MAXIMA)
+            cmd_rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA)
 
         self.enviar_comando_velocidad(lateral, avance, vertical, cmd_rotacion)
-        return distancia_al_objetivo < UMBRAL_LLEGADA_POSICION_M
+        return distancia_al_objetivo < LLEGADA_POSICION_M
 
     def rotar_a_yaw(self, angulo_objetivo_deg):
         error_yaw = normalizar_angulo_deg(angulo_objetivo_deg - self.yaw_dron_deg)
         
-        if abs(error_yaw) < UMBRAL_LLEGADA_YAW_DEG:
+        if abs(error_yaw) < LLEGADA_YAW_DEG:
             self.detener_dron()
             return True
         
-        cmd_rotacion = rango_velocidad(GANANCIA_P_YAW * error_yaw, VELOCIDAD_MAXIMA)
+        cmd_rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA)
         self.enviar_comando_velocidad(0, 0, 0, cmd_rotacion)
         return False
 
@@ -186,7 +188,7 @@ def main(args=None):
     try:
         rclpy.spin(nodo_navegacion)
     except KeyboardInterrupt:
-        nodo_navegacion.get_logger().info("Nodo detenido por el usuario (Ctrl+C)")
+        nodo_navegacion.get_logger().info("Ctrl+C")
     finally:
         nodo_navegacion.detener_dron()
         nodo_navegacion.destroy_node()
