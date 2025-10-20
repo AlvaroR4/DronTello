@@ -14,16 +14,15 @@ ESPERA_TAKEOFF = 5.0  # segundos de espera desde la primera lectura
 
 class NodoIntermedioPose(Node):
     def __init__(self):
-        super().__init__('nodo_intermedio_pose_simple')
-        self.get_logger().info('Iniciando nodoIntermiedioPose (modo simple, espera fija).')
+        super().__init__('nodo_intermedio_pose')
+        self.get_logger().info('Iniciando nodoIntermiedioPose')
 
-        self.declare_parameter('post_takeoff_delay', ESPERA_TAKEOFF)
-        self.post_takeoff_delay = float(self.get_parameter('post_takeoff_delay').value)
+        self.post_takeoff_delay = ESPERA_TAKEOFF
 
         self.offset_pos = [0.0, 0.0, 0.0]
         self.offset_angles = [0.0, 0.0, 0.0]
         self.origin_fijado = False
-
+        self.primera_lectura = True
         self.first_pose_received = False
         self.wait_timer = None
         self.last_pose = None
@@ -33,17 +32,14 @@ class NodoIntermedioPose(Node):
         qos_pub = QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
                              history=HistoryPolicy.KEEP_LAST, depth=10)
 
-        # Suscripción a la pose cruda
         self.sub_pos = self.create_subscription(
             Float32MultiArray,
             TOPIC_TELLO_POS_IN,
             self.callback_posicion,
             qos_sub
         )
-        # Publicador de pose corregida (sin cuaterniones)
         self.pub_pose = self.create_publisher(Float32MultiArray, TOPIC_POSE_OUT, qos_pub)
 
-        # Suscripción para reset manual
         try:
             self.sub_reset = self.create_subscription(
                 Bool,
@@ -62,6 +58,9 @@ class NodoIntermedioPose(Node):
             self._cancel_timer_if_any()
             self.offset_pos = [0.0, 0.0, 0.0]
             self.offset_angles = [0.0, 0.0, 0.0]
+            self.x_previo = 0.0
+            self.y_previo = 0.0
+            self.z_previo = 0.0
             self.origin_fijado = False
             self.first_pose_received = False
             self.last_pose = None
@@ -162,10 +161,28 @@ class NodoIntermedioPose(Node):
                 x_corr, y_corr, z_corr = x, y, z
                 roll_corr, pitch_corr, yaw_corr = roll, pitch, yaw
 
-            out = Float32MultiArray()
-            out.data = [float(x_corr), float(y_corr), float(z_corr),
-                        float(roll_corr), float(pitch_corr), float(yaw_corr)]
-            self.pub_pose.publish(out)
+            if self.origin_fijado:
+                if self.primera_lectura: 
+                    self.primera_lectura = False
+                    self.x_previo = x_corr 
+                    self.y_previo = y_corr
+                    self.z_previo = z_corr
+
+                    out = Float32MultiArray()
+                    out.data = [float(x_corr), float(y_corr), float(z_corr),
+                    float(roll_corr), float(pitch_corr), float(yaw_corr)]
+                    self.pub_pose.publish(out)
+                else: 
+                    if abs(x_corr - self.x_previo) > 2 or abs(y_corr - self.y_previo) > 2 or abs(z_corr - self.z_previo) > 2:
+                        pass 
+                    else:
+                        self.x_previo = x_corr 
+                        self.y_previo = y_corr
+                        self.z_previo = z_corr
+                        out = Float32MultiArray()
+                        out.data = [float(x_corr), float(y_corr), float(z_corr),
+                                    float(roll_corr), float(pitch_corr), float(yaw_corr)]
+                        self.pub_pose.publish(out)
 
         except Exception as e:
             self.get_logger().error(f"Error en callback_posicion: {e}")
@@ -176,7 +193,7 @@ class NodoIntermedioPose(Node):
             self._cancel_timer_if_any()
         except Exception:
             pass
-        self.get_logger().info("Destruyendo nodoIntermiedioPose (modo simple).")
+        self.get_logger().info("Fin nodoIntermiedioPose")
         super().destroy_node()
 
 
@@ -190,7 +207,6 @@ def main(args=None):
         pass
     except Exception as e:
         if nodo:
-            nodo.get_logger().fatal(f"Error inesperado: {e}")
             nodo.get_logger().fatal(traceback.format_exc())
     finally:
         if nodo:

@@ -149,6 +149,7 @@ class NodoNavegacion(Node):
 
     def enviar_comando_velocidad(self, lr, fb, ud, yv):
         msg = Float32MultiArray(data=[float(lr), float(fb), float(ud), float(yv)])
+        #msg = Float32MultiArray(data=[0,0,0,0])
         self.pub_velocidad.publish(msg)
 
     def detener_dron(self):
