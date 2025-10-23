@@ -139,6 +139,16 @@ class Tello(Node):
             self.tello.takeoff()
         
         #comandos velocidad
+        if (lr == 0 and fb == 0 and ud == 0 and yv == 0):
+            self.tello.right(0)
+            self.tello.left(0)
+            self.tello.forward(0)
+            self.tello.backward(0)
+            self.tello.up(0)
+            self.tello.down(0)
+            self.tello.clockwise(0)
+            self.tello.counter_clockwise(0)
+
         if lr > 0:
             self.tello.right(lr)
         else:
@@ -243,6 +253,7 @@ def main(args=None):
         rclpy.spin(node)
     except KeyboardInterrupt:
         print('Ctrl+C')
+        node.tello.land()
     finally:
         node.destroy_node()
         rclpy.shutdown()

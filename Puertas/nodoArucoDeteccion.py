@@ -9,6 +9,7 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 import math
+from collections import deque
 
 ROS_TOPIC_IMAGEN_INPUT = '/tello/imagen'
 ROS_TOPIC_POSE_DRON_INPUT = '/tello/pose_corregida'
@@ -34,6 +35,7 @@ class NodoDeteccionAruco(Node):
         self.roll = 0.0
         self.pitch = 0.0
         self.yaw = 0.0
+        self.primera_pose_recibida = False
 
         self.bridge = CvBridge()
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(ARUCO_DICT)
@@ -46,6 +48,10 @@ class NodoDeteccionAruco(Node):
         ])
         self.dist_coeffs = np.zeros((1, 5))
 
+        self.TAMAÑO_BUFFER_MEDIA = 10
+        # Buffer para almacenar los resultados [x, y, z, angulo]
+        self.resultados_buffer = []
+        
         qos_best_effort = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
         qos_reliable = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST, depth=10)
 
@@ -63,7 +69,13 @@ class NodoDeteccionAruco(Node):
             self.pos_dron_mundo = np.array([pose_data[0], pose_data[1], pose_data[2]])
             self.roll, self.pitch, self.yaw = pose_data[3], pose_data[4], pose_data[5]
 
+            if not self.primera_pose_recibida: 
+                self.primera_pose_recibida = True
+                self.get_logger().info("COMENZANDO DETECCION PUERTAS")
+
     def callback_procesamiento_imagen(self, msg_imagen):
+        if not self.primera_pose_recibida: 
+            return
         try:
             frame_bgr = self.bridge.imgmsg_to_cv2(msg_imagen, desired_encoding="bgr8")
             frame_bgr = cv2.resize(frame_bgr, (ANCHO_IMAGEN, ALTO_IMAGEN))
@@ -95,12 +107,11 @@ class NodoDeteccionAruco(Node):
                 
                 self.dibujar_info(frame_bgr, esquinas, ids[0], distancia, punto_mundo, angulo_global_puerta)
 
-        try:
-            msg_debug = self.bridge.cv2_to_imgmsg(frame_bgr, encoding="bgr8")
-            msg_debug.header = msg_imagen.header
-            self.pub_imagen_debug.publish(msg_debug)
-        except Exception:
-            pass
+        #AQUI ANTES DE PUBLICAR EL PUNTO, HACES LA MEDIA DE LOS X PUNTOS EN UN BUFFER, Y CUANDO LLEGUEMOS HASTA X HACES LA MEDIA Y PUBLICAS EL PUNTO
+        msg_debug = self.bridge.cv2_to_imgmsg(frame_bgr, encoding="bgr8")
+        msg_debug.header = msg_imagen.header
+        self.pub_imagen_debug.publish(msg_debug)
+
 
     def punto_imagen_a_punto_cuerpo(self, cx, cy, distancia):
         z_cam = distancia

@@ -9,7 +9,7 @@ import traceback
 TOPIC_TELLO_POS_IN = '/tello/pose'         # [altura, x, y, z, (roll_deg, pitch_deg, yaw_deg)]
 TOPIC_POSE_OUT = '/tello/pose_corregida'          # publica: [x_corr, y_corr, z_corr, roll_deg, pitch_deg, yaw_deg]
 TOPIC_RESET_OFFSET = '/tello/pose_angles/reset'  
-
+MARGEN_ERROR_PUNTO = 2.0
 ESPERA_TAKEOFF = 5.0  # segundos de espera desde la primera lectura
 
 class NodoIntermedioPose(Node):
@@ -173,7 +173,8 @@ class NodoIntermedioPose(Node):
                     float(roll_corr), float(pitch_corr), float(yaw_corr)]
                     self.pub_pose.publish(out)
                 else: 
-                    if abs(x_corr - self.x_previo) > 2 or abs(y_corr - self.y_previo) > 2 or abs(z_corr - self.z_previo) > 2:
+                    if abs(x_corr - self.x_previo) > MARGEN_ERROR_PUNTO or abs(y_corr - self.y_previo) > MARGEN_ERROR_PUNTO or abs(z_corr - self.z_previo) > MARGEN_ERROR_PUNTO:
+                        self.get_logger().info("DESCARTADO PUNTO")
                         pass 
                     else:
                         self.x_previo = x_corr 

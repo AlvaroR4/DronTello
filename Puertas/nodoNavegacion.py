@@ -7,7 +7,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 DISTANCIA_APROXIMACION_M = 0.50
-DISTANCIA_SALIDA_M = 0.50
+DISTANCIA_SALIDA_M = 1.0
 MARGEN_ALTURA_M = 0.50
 AUMENTAR_VELOCIDAD = 0.8
 AUMENTAR_YAW = 1.0
