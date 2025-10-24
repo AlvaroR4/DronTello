@@ -8,16 +8,15 @@ class Visualizador2D(Node):
     def __init__(self, puerta_real_x, puerta_real_y):
         super().__init__('visualizador_2d')
 
-        # Coordenadas de la puerta real
         self.puerta_real = (puerta_real_x, puerta_real_y)
 
-        # Listas para almacenar el historial de la trayectoria
         self.historial_dron_x = []
         self.historial_dron_y = []
-        self.puertas_calculadas_x = []
-        self.puertas_calculadas_y = []
+        
+        self.primera_puerta_calculada = None
+        self.puertas_recalculadas_x = []
+        self.puertas_recalculadas_y = []
 
-        # Suscriptores
         self.sub_pose = self.create_subscription(
             Float32MultiArray,
             '/tello/pose_corregida',
@@ -26,27 +25,28 @@ class Visualizador2D(Node):
         )
         self.sub_puerta = self.create_subscription(
             Float32MultiArray,
-            '/tello/punto_y_angulo', # Usamos este para el punto P calculado
+            '/tello/punto_y_angulo',
             self.puerta_callback,
             10
         )
 
-        # Configuración del gráfico
-        plt.ion() # Activar modo interactivo
+        plt.ion()
         self.fig, self.ax = plt.subplots()
-        self.linea_dron, = self.ax.plot([], [], 'b-', label='Trayectoria Dron') # Línea azul para el dron
-        self.puntos_puertas_calc, = self.ax.plot([], [], 'rx', markersize=10, label='Puertas Calculadas (P)') # Cruces rojas
         
-        self.ax.plot(self.puerta_real[0], self.puerta_real[1], 'go', markersize=15, label='Puerta Real') # Círculo verde grande
+        self.linea_dron, = self.ax.plot([], [], 'b-', label='Trayectoria Dron')
+        self.ax.plot(self.puerta_real[0], self.puerta_real[1], 'go', markersize=15, label='Puerta Real')
         
+        self.punto_primera_puerta, = self.ax.plot([], [], 'm*', markersize=15, label='Primera Detección') # Estrella Magenta
+        
+        self.puntos_recalculados, = self.ax.plot([], [], 'rx', markersize=7, label='Nuevas detecciones') # Cruces Rojas
+
         self.ax.set_xlabel("Eje X (Mundo)")
         self.ax.set_ylabel("Eje Y (Mundo)")
-        self.ax.set_title("Visualización de Trayectoria 2D (Vista Cenital)")
+        self.ax.set_title("Visualización de Trayectoria 2D (XY)")
         self.ax.legend()
         self.ax.grid(True)
         self.ax.set_aspect('equal', adjustable='box')
 
-        # Temporizador para actualizar el gráfico
         self.timer = self.create_timer(0.5, self.actualizar_grafico)
         self.get_logger().info("Visualizador 2D iniciado.")
 
@@ -57,31 +57,30 @@ class Visualizador2D(Node):
 
     def puerta_callback(self, msg):
         if len(msg.data) >= 2:
-            self.puertas_calculadas_x.append(msg.data[0])
-            self.puertas_calculadas_y.append(msg.data[1])
+            if self.primera_puerta_calculada is None:
+                self.primera_puerta_calculada = (msg.data[0], msg.data[1])
+                self.get_logger().info(f"Primera detección de puerta registrada en: {self.primera_puerta_calculada}")
+            else:
+                self.puertas_recalculadas_x.append(msg.data[0])
+                self.puertas_recalculadas_y.append(msg.data[1])
 
     def actualizar_grafico(self):
-        # Actualizar los datos de las líneas
         self.linea_dron.set_data(self.historial_dron_x, self.historial_dron_y)
-        self.puntos_puertas_calc.set_data(self.puertas_calculadas_x, self.puertas_calculadas_y)
+        
+        if self.primera_puerta_calculada:
+            self.punto_primera_puerta.set_data([self.primera_puerta_calculada[0]], [self.primera_puerta_calculada[1]])
+        
+        self.puntos_recalculados.set_data(self.puertas_recalculadas_x, self.puertas_recalculadas_y)
 
-        # Reajustar los límites del gráfico para que todo sea visible
         self.ax.relim()
         self.ax.autoscale_view()
 
-        # Forzar el redibujado
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
 
 def main(args=None):
-    # Pedir al usuario las coordenadas de la puerta real
-    try:
-        puerta_x = float(input("Introduce la coordenada X del punto P real de la puerta: "))
-        puerta_y = float(input("Introduce la coordenada Y del punto P real de la puerta: "))
-    except ValueError:
-        print("Entrada no válida. Usando (0,0) por defecto.")
-        puerta_x, puerta_y = 0.0, 0.0
-
+    puerta_x = float(input("Introduce la coordenada X del punto P real de la puerta: "))
+    puerta_y = float(input("Introduce la coordenada Y del punto P real de la puerta: "))
     rclpy.init(args=args)
     visualizador_node = Visualizador2D(puerta_x, puerta_y)
     try:
