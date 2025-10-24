@@ -6,10 +6,10 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-DISTANCIA_APROXIMACION_M = 0.50
-DISTANCIA_SALIDA_M = 1.0
+DISTANCIA_APROXIMACION_M = 0.10
+DISTANCIA_SALIDA_M = 0.9
 MARGEN_ALTURA_M = 0.50
-AUMENTAR_VELOCIDAD = 0.8
+AUMENTAR_VELOCIDAD = 1.0
 AUMENTAR_YAW = 1.0
 VELOCIDAD_MAXIMA = 20
 DISTANCIA_NUEVA_PUERTA_M = 1.0
@@ -111,6 +111,7 @@ class NodoNavegacion(Node):
             objetivo = self.puntos_trayectoria_actual[2]
             if self.ir_a_posicion(objetivo, yaw_objetivo_deg=self.angulo_objetivo_deg):
                 self.get_logger().info("Puerta cruzada")
+                self.enviar_comando_velocidad(2,0,0,0)#land
                 self.estado_mision = 'ESPERANDO_PUERTA'
                 self.mision_en_curso = False
                 self.detener_dron()
