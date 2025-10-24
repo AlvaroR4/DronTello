@@ -9,7 +9,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 DISTANCIA_APROXIMACION_M = 0.10
 DISTANCIA_SALIDA_M = 0.9
 MARGEN_ALTURA_M = 0.50
-AUMENTAR_VELOCIDAD = 1.0
+AUMENTAR_VELOCIDAD = 8.0
 AUMENTAR_YAW = 1.0
 VELOCIDAD_MAXIMA = 20
 DISTANCIA_NUEVA_PUERTA_M = 1.0
@@ -48,7 +48,14 @@ class NodoNavegacion(Node):
         self.pub_marcadores = self.create_publisher(MarkerArray, '/trayectoria_visual', qos_marcadores)
 
         self.timer_control = self.create_timer(1.0 / 20.0, self.bucle_de_control)
+        self.timer_despegue = self.create_timer(1.0, self.enviar_comando_despegue, oneshot=True)
         self.get_logger().info("Nodo de Navegación iniciado. Esperando detección de puertas.")
+    
+    def enviar_comando_despegue(self):
+        self.get_logger().info("Enviando comando de despegue")
+        comando_despegue = [2.0, 2.0, 2.0, 0.0]
+        msg = Float32MultiArray(data=[float(val) for val in comando_despegue])
+        self.pub_velocidad.publish(msg)
 
     def callback_pose_dron(self, msg: Float32MultiArray):
         if len(msg.data) >= 6:
@@ -94,6 +101,7 @@ class NodoNavegacion(Node):
 
     def bucle_de_control(self):
         if not self.pose_recibida or not self.mision_en_curso:
+            self.detener_dron()
             return
 
         if self.estado_mision == 'IR_A_PUNTO_APROXIMACION':
@@ -125,9 +133,9 @@ class NodoNavegacion(Node):
 
         #Ejes Mundo: +X (Adelante), +Y (Derecha), +Z (Abajo)
         #Comandos Dron: avance (Adelante), lateral (Derecha), vertical (Arriba)
-        avance = rango_velocidad(velocidad_deseada[0] * 100, VELOCIDAD_MAXIMA)
-        lateral      = rango_velocidad(velocidad_deseada[1] * 100, VELOCIDAD_MAXIMA)
-        vertical     = rango_velocidad(-velocidad_deseada[2] * 100, VELOCIDAD_MAXIMA)#comprobar signo
+        avance = rango_velocidad(velocidad_deseada[0] , VELOCIDAD_MAXIMA)
+        lateral      = rango_velocidad(velocidad_deseada[1] , VELOCIDAD_MAXIMA)
+        vertical     = rango_velocidad(-velocidad_deseada[2] , VELOCIDAD_MAXIMA)#comprobar signo
         
         cmd_rotacion = 0
         if yaw_objetivo_deg is not None:
