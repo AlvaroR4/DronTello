@@ -1,0 +1,45 @@
+Lista Rápida de Comandos de tmux
+Prefijo por defecto: Ctrl + b
+
+Paneles (Divisiones de pantalla)
+% - Dividir panel verticalmente.
+
+" - Dividir panel horizontalmente.
+
+Entrar en modo scroll: Ctrl + b, luego [
+
+Subir/Bajar: ↑ / ↓ / Re Pág / Av Pág
+
+Salir del modo scroll: q
+
+Flechas de dirección - Moverse entre paneles.
+
+x - Cerrar panel actual.
+
+z - Hacer zoom en el panel actual (y volver a la normalidad).
+
+Mantener Ctrl + b y pulsar Flechas de dirección - Redimensionar panel.
+
+Ventanas (Pestañas)
+c - Crear una nueva ventana.
+
+w - Listar ventanas.
+
+p - Ir a la ventana anterior.
+
+n - Ir a la ventana siguiente.
+
+& - Cerrar ventana actual.
+
+, - Renombrar ventana actual.
+
+Número (0-9) - Ir a la ventana por su número.
+
+Sesiones (Grupos de trabajo)
+d - Desacoplarse de la sesión actual (dejarla corriendo en segundo plano).
+
+(fuera de tmux) tmux ls - Listar todas las sesiones activas.
+
+(fuera de tmux) tmux attach -t [nombre_sesion] - Volver a acoplarse a una sesión.
+
+$ - Renombrar sesión actual.

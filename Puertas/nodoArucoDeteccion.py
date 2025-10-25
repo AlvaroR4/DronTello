@@ -104,10 +104,10 @@ class NodoDeteccionAruco(Node):
 
                 self.publicar_punto_mundo(punto_mundo, msg_imagen.header.stamp)
                 self.publicar_punto_y_angulo(punto_mundo, angulo_global_puerta)
+                self.get_logger().info(f"Mundo: ({punto_mundo[0]:.2f}, {punto_mundo[1]:.2f}, {punto_mundo[2]:.2f})")
                 
                 self.dibujar_info(frame_bgr, esquinas, ids[0], distancia, punto_mundo, angulo_global_puerta)
 
-        #AQUI ANTES DE PUBLICAR EL PUNTO, HACES LA MEDIA DE LOS X PUNTOS EN UN BUFFER, Y CUANDO LLEGUEMOS HASTA X HACES LA MEDIA Y PUBLICAS EL PUNTO
         msg_debug = self.bridge.cv2_to_imgmsg(frame_bgr, encoding="bgr8")
         msg_debug.header = msg_imagen.header
         self.pub_imagen_debug.publish(msg_debug)

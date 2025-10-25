@@ -1,0 +1,22 @@
+#Para descargar telloPos:
+
+python3 -m venv --system-site-packages ~/telloPos
+
+source ~/telloPos/bin/activate
+
+pip install "numpy==1.26.4"
+pip install "opencv-python-headless==4.11.0.86"
+pip install git+https://github.com/hanyazou/TelloPy.git@develop-0.7.0
+
+deactivate
+
+#Para descargar tello:
+
+python3 -m venv --system-site-packages ~/tello
+
+source ~/tello/bin/activate
+
+pip install "numpy==1.26.4" matplotlib
+pip install "opencv-contrib-python==4.12.0.88" --no-deps
+
+deactivate
