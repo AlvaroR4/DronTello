@@ -131,9 +131,23 @@ class NodoDeteccionAruco(Node):
         punto_mundo = self.pos_dron_mundo + R_cuerpo_a_mundo @ punto_cuerpo
         return punto_mundo, R_cuerpo_a_mundo
 
-    def calcular_angulo_global_puerta(self, rvec_marcador_cam, R_dron_a_mundo):
-        R_marcador_a_dron, _ = cv2.Rodrigues(rvec_marcador_cam)
-        R_marcador_a_mundo = R_dron_a_mundo @ R_marcador_a_dron
+    def calcular_angulo_global_puerta(self, rvec_marcador_camara, R_dron_a_mundo):
+        # 1. Matriz de rotación del marcador con respecto a la CÁMARA
+        R_marcador_a_camara, _ = cv2.Rodrigues(rvec_marcador_camara)
+
+        # 2. Matriz de corrección fija que transforma de ejes CÁMARA a ejes DRON (FRD)
+        # x_dron = z_cam, y_dron = x_cam, z_dron = y_cam
+        R_camara_a_dron = np.array([
+            [0, 0, 1],  # El eje X del dron es el Z de la cámara
+            [1, 0, 0],  # El eje Y del dron es el X de la cámara
+            [0, 1, 0]   # El eje Z del dron es el Y de la cámara
+        ])
+        # 3. Calcular la rotación del marcador con respecto al MUNDO
+        # R_marcador_a_mundo = R_dron_a_mundo @ R_marcador_a_dron
+        # R_marcador_a_dron = R_camara_a_dron @ R_marcador_a_camara
+        R_marcador_a_mundo = R_dron_a_mundo @ R_camara_a_dron @ R_marcador_a_camara
+        
+        # 4. Extraer el ángulo de Yaw de la matriz de rotación global final
         yaw_rad = math.atan2(R_marcador_a_mundo[1, 0], R_marcador_a_mundo[0, 0])
         return math.degrees(yaw_rad)
 
