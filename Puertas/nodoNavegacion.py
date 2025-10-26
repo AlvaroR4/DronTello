@@ -6,15 +6,16 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-DISTANCIA_APROXIMACION_M = 0.10
-DISTANCIA_SALIDA_M = 0.9
-MARGEN_ALTURA_M = 0.50
-AUMENTAR_VELOCIDAD = 8.0
+DISTANCIA_APROXIMACION_M = 0.40 #distancia P'
+DISTANCIA_SALIDA_M = 0.6 #distancia P''
+MARGEN_ALTURA_M = 0.50 #aumentar altura del P
+AUMENTAR_VELOCIDAD = 3.0
 AUMENTAR_YAW = 1.0
+VELOCIDAD_MAXIMA_YAW = 5.0 
 VELOCIDAD_MAXIMA = 20
-DISTANCIA_NUEVA_PUERTA_M = 1.0
-LLEGADA_POSICION_M = 0.10
-LLEGADA_YAW_DEG = 5.0
+DISTANCIA_NUEVA_PUERTA_M = 1.0 #para que un P sea admitido como nueva puerta
+ERROR_POSICION_M = 0.10 #margen error para considerar que estas un un punto
+ERROR_YAW_DEG = 5.0 #margen error yaw
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -31,9 +32,10 @@ class NodoNavegacion(Node):
         self.yaw_dron_deg = 0.0
         self.estado_mision = 'ESPERANDO_PUERTA'
         self.mision_en_curso = False
-        self.puertas_visitadas = []
+        self.puertas_visitadas = []#lista de colas detectadas
+        self.cola_puertas = []#lista de puertas a navegar, primero punto, siguiente valor su angulo
         self.puntos_trayectoria_actual = []
-        self.angulo_objetivo_deg = 0.0
+        self.minimo_una_puerta = False #para que minimo atraviese una puerta 
 
         self.sub_pose = self.create_subscription(Float32MultiArray, '/tello/pose_corregida', self.callback_pose_dron, 10)
         self.sub_puerta = self.create_subscription(Float32MultiArray, '/tello/punto_y_angulo', self.callback_nueva_puerta, 10)
@@ -80,18 +82,25 @@ class NodoNavegacion(Node):
             return
 
         self.get_logger().info(f"Nueva puerta detectada en {punto_puerta_recibido}")
+        angulo_puerta = float(msg.data[3])
         self.puertas_visitadas.append(punto_puerta_recibido)
+        self.cola_puertas.append(punto_puerta_recibido)
+        self.cola_puertas.append(angulo_puerta)
         
-        punto_central_puerta = punto_puerta_recibido
-        self.angulo_objetivo_deg = float(msg.data[3])
-        angulo_objetivo_rad = math.radians(self.angulo_objetivo_deg)
+        if self.mision_en_curso:
+            return #Para que si detecta nuevo punto no cambie la trayectoria por el
+        #Aqui añadir la logica de lista de colas objetivo
+
+        punto_central_puerta = self.cola_puertas.pop(0)
+        angulo_objetivo_deg = self.cola_puertas.pop(0)
+        angulo_objetivo_rad = math.radians(angulo_objetivo_deg)
 
         punto_central_puerta[2] -= MARGEN_ALTURA_M
         normal_plano_puerta = np.array([math.cos(angulo_objetivo_rad), math.sin(angulo_objetivo_rad), 0.0])
         
         punto_aproximacion = punto_central_puerta - DISTANCIA_APROXIMACION_M * normal_plano_puerta
         punto_salida = punto_central_puerta + DISTANCIA_SALIDA_M * normal_plano_puerta
-        self.puntos_trayectoria_actual = [punto_aproximacion, punto_central_puerta, punto_salida]
+        self.puntos_trayectoria_actual = [punto_aproximacion, punto_central_puerta, punto_salida, angulo_objetivo_deg]
         
         self.publicar_marcadores_rviz()
         
@@ -100,6 +109,9 @@ class NodoNavegacion(Node):
         self.get_logger().info(f"Iniciando trayectoria. Próximo objetivo: {punto_aproximacion}")
 
     def bucle_de_control(self):
+        if len(self.cola_puertas) == 0 and self.minimo_una_puerta:
+            self.enviar_comando_velocidad(2,0,0,0)#land
+            exit(1)
         if not self.pose_recibida or not self.mision_en_curso:
             self.detener_dron()
             return
@@ -111,49 +123,62 @@ class NodoNavegacion(Node):
                 self.estado_mision = 'ROTAR_HACIA_PUERTA'
 
         elif self.estado_mision == 'ROTAR_HACIA_PUERTA':
-            if self.rotar_a_yaw(self.angulo_objetivo_deg):
+            if self.rotar_a_yaw(self.puntos_trayectoria_actual[3]):
                 self.get_logger().info("Rotación completada -> Cruzando puerta")
                 self.estado_mision = 'IR_A_PUNTO_SALIDA'
 
         elif self.estado_mision == 'IR_A_PUNTO_SALIDA':
             objetivo = self.puntos_trayectoria_actual[2]
-            if self.ir_a_posicion(objetivo, yaw_objetivo_deg=self.angulo_objetivo_deg):
+            if self.ir_a_posicion(objetivo):
                 self.get_logger().info("Puerta cruzada")
-                self.enviar_comando_velocidad(2,0,0,0)#land
                 self.estado_mision = 'ESPERANDO_PUERTA'
                 self.mision_en_curso = False
+                self.minimo_una_puerta = True
                 self.detener_dron()
                 self.publicar_marcadores_rviz(borrar=True)
 
     def ir_a_posicion(self, punto_objetivo, yaw_objetivo_deg=None):
-        error_posicion = punto_objetivo - self.posicion_dron_mundo
-        distancia_al_objetivo = np.linalg.norm(error_posicion)
-        
-        velocidad_deseada = AUMENTAR_VELOCIDAD * error_posicion
-
         #Ejes Mundo: +X (Adelante), +Y (Derecha), +Z (Abajo)
         #Comandos Dron: avance (Adelante), lateral (Derecha), vertical (Arriba)
-        avance = rango_velocidad(velocidad_deseada[0] , VELOCIDAD_MAXIMA)
-        lateral      = rango_velocidad(velocidad_deseada[1] , VELOCIDAD_MAXIMA)
-        vertical     = rango_velocidad(-velocidad_deseada[2] , VELOCIDAD_MAXIMA)#comprobar signo
-        
-        cmd_rotacion = 0
-        if yaw_objetivo_deg is not None:
-            error_yaw = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
-            cmd_rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA)
+        rotacion = 0
+        velocidad_deseada = punto_objetivo - self.posicion_dron_mundo
+        distancia_al_objetivo = np.linalg.norm(velocidad_deseada)
 
-        self.enviar_comando_velocidad(lateral, avance, vertical, cmd_rotacion)
-        return distancia_al_objetivo < LLEGADA_POSICION_M
+        avance = velocidad_deseada[0]
+        lateral = velocidad_deseada[1]
+        vertical = velocidad_deseada[2]
+
+        distancia_maxima = max(abs(avance),abs(lateral),abs(vertical))
+        if distancia_maxima > 0:
+            factor_aumento = distancia_maxima * AUMENTAR_VELOCIDAD
+            while(factor_aumento > VELOCIDAD_MAXIMA or factor_aumento > 0):
+                factor_aumento -= 0.5
+            avance *= factor_aumento
+            lateral *= factor_aumento
+            vertical *= factor_aumento
+
+            #Preparado para moverse a un punto y rotar a la vez en un futuro
+            
+            if yaw_objetivo_deg is not None:
+                rotacion = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
+                if abs(rotacion) > VELOCIDAD_MAXIMA_YAW:
+                    if rotacion < 0:
+                        rotacion = -VELOCIDAD_MAXIMA_YAW
+                    else: 
+                        rotacion = VELOCIDAD_MAXIMA_YAW
+                        
+        self.enviar_comando_velocidad(lateral, avance, vertical, rotacion)
+        return distancia_al_objetivo < ERROR_POSICION_M
 
     def rotar_a_yaw(self, angulo_objetivo_deg):
         error_yaw = normalizar_angulo_deg(angulo_objetivo_deg - self.yaw_dron_deg)
         
-        if abs(error_yaw) < LLEGADA_YAW_DEG:
+        if abs(error_yaw) < ERROR_YAW_DEG:
             self.detener_dron()
             return True
         
-        cmd_rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA)
-        self.enviar_comando_velocidad(0, 0, 0, cmd_rotacion)
+        rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA)
+        self.enviar_comando_velocidad(0, 0, 0, rotacion)
         return False
 
     def enviar_comando_velocidad(self, lr, fb, ud, yv):
