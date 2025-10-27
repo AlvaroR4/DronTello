@@ -28,7 +28,7 @@ class Visualizador2D(Node):
 
         plt.ion()
         self.fig, self.ax = plt.subplots()
-        self.linea_dron, = self.ax.plot([], [], 'b-', label='Trayectoria dron')
+        self.linea_dron, = self.ax.plot([], [], 'b-', label='Trayectoria dron', zorder=20)
         self.ax.plot(self.puerta_real[0], self.puerta_real[1], 'go', markersize=15, label='Puerta real')
         self.punto_primera_puerta, = self.ax.plot([], [], 'y*', markersize=15, label='Primera detección', zorder=10)         
         self.puntos_recalculados, = self.ax.plot([], [], 'rx', markersize=7, label='Nuevas detecciones')

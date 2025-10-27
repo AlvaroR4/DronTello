@@ -9,7 +9,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 DISTANCIA_APROXIMACION_M = 0.40 #distancia P'
 DISTANCIA_SALIDA_M = 0.6 #distancia P''
 MARGEN_ALTURA_M = 0.50 #aumentar altura del P
-AUMENTAR_VELOCIDAD = 3.0
+AUMENTAR_VELOCIDAD = 30.0
 AUMENTAR_YAW = 1.0
 VELOCIDAD_MAXIMA_YAW = 5.0 
 VELOCIDAD_MAXIMA = 20
@@ -50,14 +50,14 @@ class NodoNavegacion(Node):
         self.pub_marcadores = self.create_publisher(MarkerArray, '/trayectoria_visual', qos_marcadores)
 
         self.timer_control = self.create_timer(1.0 / 20.0, self.bucle_de_control)
-        self.timer_despegue = self.create_timer(1.0, self.enviar_comando_despegue, oneshot=True)
+        self.timer_despegue = self.create_timer(1000.0, self.enviar_comando_despegue) #modificar para que solo se envie una vez
         self.get_logger().info("Nodo de Navegación iniciado. Esperando detección de puertas.")
     
     def enviar_comando_despegue(self):
-        self.get_logger().info("Enviando comando de despegue")
+        #self.get_logger().info("Enviando comando de despegue")
         comando_despegue = [2.0, 2.0, 2.0, 0.0]
-        msg = Float32MultiArray(data=[float(val) for val in comando_despegue])
-        self.pub_velocidad.publish(msg)
+        #msg = Float32MultiArray(data=[float(val) for val in comando_despegue])
+        #self.pub_velocidad.publish(msg)
 
     def callback_pose_dron(self, msg: Float32MultiArray):
         if len(msg.data) >= 6:
@@ -72,48 +72,54 @@ class NodoNavegacion(Node):
         punto_puerta_recibido = np.array(msg.data[0:3])
         
         es_puerta_nueva = True
-        for puerta_visitada in self.puertas_visitadas:
-            #distancia euclidiana
-            if np.linalg.norm(punto_puerta_recibido - puerta_visitada) < DISTANCIA_NUEVA_PUERTA_M:
+        # Comprobamos que no esté ni en la cola ni en las ya visitadas
+        puertas_conocidas = self.puertas_visitadas + [self.cola_puertas[i] for i in range(0, len(self.cola_puertas), 2)]
+        for puerta_conocida in puertas_conocidas:
+            if np.linalg.norm(punto_puerta_recibido - puerta_conocida) < DISTANCIA_NUEVA_PUERTA_M:
                 es_puerta_nueva = False
                 break
         
         if not es_puerta_nueva:
             return
 
-        self.get_logger().info(f"Nueva puerta detectada en {punto_puerta_recibido}")
+        self.get_logger().info(f"Nueva puerta añadida a la cola en {punto_puerta_recibido}")
         angulo_puerta = float(msg.data[3])
-        self.puertas_visitadas.append(punto_puerta_recibido)
         self.cola_puertas.append(punto_puerta_recibido)
         self.cola_puertas.append(angulo_puerta)
-        
-        if self.mision_en_curso:
-            return #Para que si detecta nuevo punto no cambie la trayectoria por el
-        #Aqui añadir la logica de lista de colas objetivo
-
-        punto_central_puerta = self.cola_puertas.pop(0)
-        angulo_objetivo_deg = self.cola_puertas.pop(0)
-        angulo_objetivo_rad = math.radians(angulo_objetivo_deg)
-
-        punto_central_puerta[2] -= MARGEN_ALTURA_M
-        normal_plano_puerta = np.array([math.cos(angulo_objetivo_rad), math.sin(angulo_objetivo_rad), 0.0])
-        
-        punto_aproximacion = punto_central_puerta - DISTANCIA_APROXIMACION_M * normal_plano_puerta
-        punto_salida = punto_central_puerta + DISTANCIA_SALIDA_M * normal_plano_puerta
-        self.puntos_trayectoria_actual = [punto_aproximacion, punto_central_puerta, punto_salida, angulo_objetivo_deg]
-        
-        self.publicar_marcadores_rviz()
-        
-        self.estado_mision = 'IR_A_PUNTO_APROXIMACION'
-        self.mision_en_curso = True
-        self.get_logger().info(f"Iniciando trayectoria. Próximo objetivo: {punto_aproximacion}")
 
     def bucle_de_control(self):
-        if len(self.cola_puertas) == 0 and self.minimo_una_puerta:
-            self.enviar_comando_velocidad(2,0,0,0)#land
-            exit(1)
-        if not self.pose_recibida or not self.mision_en_curso:
-            self.detener_dron()
+        if not self.pose_recibida:
+            return
+
+        if not self.mision_en_curso and len(self.cola_puertas) > 0:
+            self.get_logger().info("Tarea finalizada. Buscando siguiente puerta en la cola")
+            punto_central_puerta = self.cola_puertas.pop(0)
+            angulo_objetivo_deg = self.cola_puertas.pop(0)
+
+            self.puertas_visitadas.append(punto_central_puerta)
+            
+            angulo_objetivo_rad = math.radians(angulo_objetivo_deg)
+
+            punto_central_puerta[2] -= MARGEN_ALTURA_M
+            normal_plano_puerta = np.array([math.cos(angulo_objetivo_rad), math.sin(angulo_objetivo_rad), 0.0])
+            
+            punto_aproximacion = punto_central_puerta - DISTANCIA_APROXIMACION_M * normal_plano_puerta
+            punto_salida = punto_central_puerta + DISTANCIA_SALIDA_M * normal_plano_puerta
+            self.puntos_trayectoria_actual = [punto_aproximacion, punto_central_puerta, punto_salida, angulo_objetivo_deg]
+            
+            self.publicar_marcadores_rviz()
+            
+            self.estado_mision = 'IR_A_PUNTO_APROXIMACION'
+            self.mision_en_curso = True
+            self.get_logger().info(f"Iniciando trayectoria hacia {punto_central_puerta}. Próximo objetivo: {punto_aproximacion}")
+            return # Salimos para que el siguiente ciclo ya procese el estado
+
+        # Si no hay misión en curso y la cola está vacía, no hacemos nada más
+        if not self.mision_en_curso:
+            if self.minimo_una_puerta:
+                self.get_logger().info("Cola de puertas vacía. Aterrizando.")
+                self.enviar_comando_velocidad(2, 0, 0, 0) # land
+                rclpy.shutdown()
             return
 
         if self.estado_mision == 'IR_A_PUNTO_APROXIMACION':
@@ -130,9 +136,8 @@ class NodoNavegacion(Node):
         elif self.estado_mision == 'IR_A_PUNTO_SALIDA':
             objetivo = self.puntos_trayectoria_actual[2]
             if self.ir_a_posicion(objetivo):
-                self.get_logger().info("Puerta cruzada")
-                self.estado_mision = 'ESPERANDO_PUERTA'
-                self.mision_en_curso = False
+                self.get_logger().info("Puerta cruzada.")
+                self.mision_en_curso = False 
                 self.minimo_una_puerta = True
                 self.detener_dron()
                 self.publicar_marcadores_rviz(borrar=True)
@@ -150,15 +155,16 @@ class NodoNavegacion(Node):
 
         distancia_maxima = max(abs(avance),abs(lateral),abs(vertical))
         if distancia_maxima > 0:
-            factor_aumento = distancia_maxima * AUMENTAR_VELOCIDAD
-            while(factor_aumento > VELOCIDAD_MAXIMA or factor_aumento > 0):
-                factor_aumento -= 0.5
+            velocidad_maxima_eje = distancia_maxima * AUMENTAR_VELOCIDAD
+            if velocidad_maxima_eje > VELOCIDAD_MAXIMA:
+                factor_aumento = VELOCIDAD_MAXIMA / distancia_maxima
+            else: 
+                factor_aumento = AUMENTAR_VELOCIDAD
             avance *= factor_aumento
             lateral *= factor_aumento
-            vertical *= factor_aumento
+            vertical *= -factor_aumento
 
             #Preparado para moverse a un punto y rotar a la vez en un futuro
-            
             if yaw_objetivo_deg is not None:
                 rotacion = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
                 if abs(rotacion) > VELOCIDAD_MAXIMA_YAW:
@@ -193,7 +199,7 @@ class NodoNavegacion(Node):
         marker_array = MarkerArray()
         colores = [[1.0,1.0,0.0,0.8], [1.0,0.0,0.0,0.8], [0.0,1.0,0.0,0.8]]
 
-        for i, punto in enumerate(self.puntos_trayectoria_actual):
+        for i, punto in enumerate(self.puntos_trayectoria_actual[:3]):
             marker = Marker()
             marker.header.frame_id = "map"
             marker.header.stamp = self.get_clock().now().to_msg()

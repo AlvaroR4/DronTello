@@ -163,7 +163,6 @@ class NodoDeteccionAruco(Node):
         self.pub_punto_angulo.publish(msg)
 
     def dibujar_info(self, imagen, esquinas, id_marcador, dist, punto_mundo, angulo):
-        # --- CORRECCIÓN: La función ahora acepta y dibuja el ángulo ---
         cv2.polylines(imagen, [esquinas.astype(np.int32)], True, (0, 255, 0), 2)
         texto_mundo = f"Mundo: ({punto_mundo[0]:.2f}, {punto_mundo[1]:.2f}, {punto_mundo[2]:.2f})"
         texto_angulo = f"Angulo Global (Z): {angulo:.1f} deg"
