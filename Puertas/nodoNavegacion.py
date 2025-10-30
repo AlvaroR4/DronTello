@@ -32,7 +32,7 @@ class NodoNavegacion(Node):
         self.yaw_dron_deg = 0.0
         self.estado_mision = 'ESPERANDO_PUERTA'
         self.mision_en_curso = False
-        self.puertas_visitadas = []#lista de colas detectadas
+        self.puertas_visitadas = []#lista de puertas detectadas
         self.cola_puertas = []#lista de puertas a navegar, primero punto, siguiente valor su angulo
         self.puntos_trayectoria_actual = []
         self.minimo_una_puerta = False #para que minimo atraviese una puerta 
@@ -50,14 +50,13 @@ class NodoNavegacion(Node):
         self.pub_marcadores = self.create_publisher(MarkerArray, '/trayectoria_visual', qos_marcadores)
 
         self.timer_control = self.create_timer(1.0 / 20.0, self.bucle_de_control)
-        self.timer_despegue = self.create_timer(1000.0, self.enviar_comando_despegue) #modificar para que solo se envie una vez
+        self.enviar_comando_despegue()
         self.get_logger().info("Nodo de Navegación iniciado. Esperando detección de puertas.")
     
     def enviar_comando_despegue(self):
-        #self.get_logger().info("Enviando comando de despegue")
-        comando_despegue = [2.0, 2.0, 2.0, 0.0]
-        #msg = Float32MultiArray(data=[float(val) for val in comando_despegue])
-        #self.pub_velocidad.publish(msg)
+        self.get_logger().info("Enviando comando de despegue")
+        msg = Float32MultiArray(data=[2.0, 2.0, 2.0, 0.0])
+        self.pub_velocidad.publish(msg)
 
     def callback_pose_dron(self, msg: Float32MultiArray):
         if len(msg.data) >= 6:
@@ -70,22 +69,61 @@ class NodoNavegacion(Node):
             return
 
         punto_puerta_recibido = np.array(msg.data[0:3])
-        
-        es_puerta_nueva = True
-        # Comprobamos que no esté ni en la cola ni en las ya visitadas
-        puertas_conocidas = self.puertas_visitadas + [self.cola_puertas[i] for i in range(0, len(self.cola_puertas), 2)]
-        for puerta_conocida in puertas_conocidas:
-            if np.linalg.norm(punto_puerta_recibido - puerta_conocida) < DISTANCIA_NUEVA_PUERTA_M:
-                es_puerta_nueva = False
-                break
-        
-        if not es_puerta_nueva:
-            return
+        angulo_recibido_deg = float(msg.data[3])
+
+        for puerta_visitada in self.puertas_visitadas:
+            if np.linalg.norm(punto_puerta_recibido - puerta_visitada) < DISTANCIA_NUEVA_PUERTA_M:
+                self.get_logger().info(f"Puerta en {punto_puerta_recibido} ya ha sido visitada; ignorada")
+                return
+            
+        if self.mision_en_curso:
+            punto_central_actual = self.puntos_trayectoria_actual[1]
+            if np.linalg.norm(punto_puerta_recibido - punto_central_actual) < DISTANCIA_NUEVA_PUERTA_M:
+                self.get_logger().info("Calculando nueva trayectoria")
+
+                angulo_actual_deg = self.puntos_trayectoria_actual[3]
+                
+                punto_central_nuevo = (punto_central_actual + punto_puerta_recibido) / 2.0
+
+                for i, puerta_visitada in enumerate(self.puertas_visitadas):
+                    if np.array_equal(puerta_visitada, punto_central_actual):
+                        self.puertas_visitadas[i] = punto_central_nuevo
+                        break
+
+                angulo_nuevo_deg = (angulo_actual_deg + angulo_recibido_deg) / 2.0
+                angulo_nuevo_rad = math.radians(angulo_nuevo_deg)
+
+                normal_plano_puerta = np.array([math.cos(angulo_nuevo_rad), math.sin(angulo_nuevo_rad), 0.0])
+                punto_aproximacion_nuevo = punto_central_nuevo - DISTANCIA_APROXIMACION_M * normal_plano_puerta
+                punto_salida_nuevo = punto_central_nuevo + DISTANCIA_SALIDA_M * normal_plano_puerta
+
+                self.puntos_trayectoria_actual = [
+                    punto_aproximacion_nuevo,
+                    punto_central_nuevo,
+                    punto_salida_nuevo,
+                    angulo_nuevo_deg
+                ]
+
+                self.publicar_marcadores_rviz()
+                return
+
+        for i in range(0, len(self.cola_puertas), 2):
+            punto_en_cola = self.cola_puertas[i]
+            if np.linalg.norm(punto_puerta_recibido - punto_en_cola) < DISTANCIA_NUEVA_PUERTA_M:
+                self.get_logger().info(f"Actualizando una puerta en la cola.")
+                
+                nuevo_punto_promedio = (punto_en_cola + punto_puerta_recibido) / 2.0
+                self.cola_puertas[i] = nuevo_punto_promedio
+
+                angulo_en_cola_deg = self.cola_puertas[i+1]
+                nuevo_angulo_promedio = (angulo_en_cola_deg + angulo_recibido_deg) / 2.0
+                self.cola_puertas[i+1] = nuevo_angulo_promedio
+                
+                return 
 
         self.get_logger().info(f"Nueva puerta añadida a la cola en {punto_puerta_recibido}")
-        angulo_puerta = float(msg.data[3])
         self.cola_puertas.append(punto_puerta_recibido)
-        self.cola_puertas.append(angulo_puerta)
+        self.cola_puertas.append(angulo_recibido_deg)
 
     def bucle_de_control(self):
         if not self.pose_recibida:
