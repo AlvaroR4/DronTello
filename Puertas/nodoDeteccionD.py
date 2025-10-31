@@ -36,6 +36,13 @@ class NodoDeteccionLeds(Node):
 
         self.bridge = CvBridge()
 
+        self.camera_matrix = np.array([
+            [FOCAL_PIXELS, 0, ANCHO_IMAGEN / 2],
+            [0, FOCAL_PIXELS, ALTO_IMAGEN / 2],
+            [0, 0, 1]
+        ], dtype=np.float32)
+        self.dist_coeffs = np.zeros((4, 1), dtype=np.float32)
+
         qos_best_effort = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
         qos_reliable = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST, depth=10)
 
@@ -43,7 +50,7 @@ class NodoDeteccionLeds(Node):
         self.sub_pose = self.create_subscription(Float32MultiArray, ROS_TOPIC_POSE_DRON_INPUT, self.callback_pose, qos_reliable)
         self.pub_punto_angulo = self.create_publisher(Float32MultiArray, ROS_TOPIC_PUNTO_ANGULO_OUTPUT, 10)
         self.pub_imagen_debug = self.create_publisher(Image, ROS_TOPIC_IMAGEN_DEBUG_OUTPUT, 10)
-        self.pub_punto_mundo = self.create_publisher(PointStamped, ROS_TOPIC_PUNTO_MUNDO_OUTPUT, 10) # Depuración
+        self.pub_punto_mundo = self.create_publisher(PointStamped, ROS_TOPIC_PUNTO_MUNDO_OUTPUT, 10)
 
         self.get_logger().info("Nodo inicializado y listo para detectar puertas.")
 
@@ -96,7 +103,15 @@ class NodoDeteccionLeds(Node):
             pass
 
     def detectar_esquinas(self, frame_hsv, frame_debug):
-        mask = cv2.inRange(frame_hsv, COLOR_MIN, COLOR_MAX)
+        rojo_min1 = np.array([0, 120, 70])
+        rojo_max1 = np.array([10, 255, 255])    
+        rojo_min2 = np.array([170, 120, 70])
+        rojo_max2 = np.array([179, 255, 255])
+        mask1 = cv2.inRange(frame_hsv, rojo_min1, rojo_max1)
+        mask2 = cv2.inRange(frame_hsv, rojo_min2, rojo_max2)
+        mask = mask1 + mask2
+
+        #mask = cv2.inRange(frame_hsv, COLOR_MIN, COLOR_MAX)
         kernel = np.ones((5,5), np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -136,26 +151,46 @@ class NodoDeteccionLeds(Node):
         punto_mundo = self.pos_dron_mundo + R_dron_a_mundo @ punto_cuerpo
         return punto_mundo, R_dron_a_mundo
 
-    def calcular_angulo_global(self, esquinas_ordenadas, distancia, R_dron_a_mundo):
-        # Transforma los dos puntos inferiores de la puerta a coordenadas de mundo
-        sup_izq_px, inf_izq_px, sup_der_px, inf_der_px = esquinas_ordenadas
+    def calcular_angulo_global(self, esquinas_ordenadas_px, R_dron_a_mundo):
+        # 1. Definir el modelo 3D de la puerta en su propio sistema de coordenadas.
+        # Asumimos que la puerta es un rectángulo. Si no es un cuadrado, ajusta el ancho.
+        alto_real = ALTO_REAL_PUERTA_M
+        ancho_real = alto_real # Asumimos que la puerta es cuadrada. Cambia esto si no lo es.
         
-        punto_cuerpo_inf_izq = self.px_a_cuerpo(inf_izq_px[0], inf_izq_px[1], distancia)
-        punto_cuerpo_inf_der = self.px_a_cuerpo(inf_der_px[0], inf_der_px[1], distancia)
+        puntos_objeto_3d = np.array([
+            [-ancho_real / 2,  alto_real / 2, 0], # Superior Izquierda
+            [-ancho_real / 2, -alto_real / 2, 0], # Inferior Izquierda
+            [ ancho_real / 2,  alto_real / 2, 0], # Superior Derecha
+            [ ancho_real / 2, -alto_real / 2, 0]  # Inferior Derecha
+        ], dtype=np.float32)
 
-        punto_mundo_inf_izq, _ = self.cuerpo_a_mundo(punto_cuerpo_inf_izq)
-        punto_mundo_inf_der, _ = self.cuerpo_a_mundo(punto_cuerpo_inf_der)
+        # 2. Convertir esquinas a un array de numpy con el formato correcto.
+        puntos_imagen_2d = np.array(esquinas_ordenadas_px, dtype=np.float32)
+
+        # 3. Resolver el problema PnP para obtener la rotación (rvec) y traslación (tvec).
+        # Esto nos dice cómo está orientada la puerta con respecto a la CÁMARA.
+        try:
+            success, rvec, tvec = cv2.solvePnP(puntos_objeto_3d, puntos_imagen_2d, self.camera_matrix, self.dist_coeffs)
+            if not success:
+                return 0.0 # No se pudo calcular
+        except:
+            return 0.0 # Error en el cálculo
+
+        # 4. Convertir el vector de rotación 'rvec' a una matriz de rotación 3x3.
+        R_puerta_a_camara, _ = cv2.Rodrigues(rvec)
+
+        # 5. Aplicar la cadena de transformaciones para obtener la orientación en el MUNDO.
+        # (Mundo <- Dron <- Cámara <- Puerta)
+        # La transformación de Cámara a Dron (FRD) es una rotación fija.
+        R_camara_a_dron = np.array([
+            [0, 0, 1],  # El eje X del dron (Adelante) es el Z de la cámara.
+            [1, 0, 0],  # El eje Y del dron (Derecha) es el X de la cámara.
+            [0, 1, 0]   # El eje Z del dron (Abajo) es el Y de la cámara.
+        ])
+        R_puerta_a_mundo = R_dron_a_mundo @ R_camara_a_dron @ R_puerta_a_camara
         
-        # Vector de la base de la puerta en el mundo
-        vector_base = punto_mundo_inf_der - punto_mundo_inf_izq
-        
-        # Vector normal a la puerta en el plano XY (rotado 90 grados)
-        # Si vector_base es (vx, vy), el normal es (-vy, vx)
-        normal_x = -vector_base[1]
-        normal_y = vector_base[0]
-        
-        # Ángulo del vector normal (Yaw global de la puerta)
-        angulo_rad = math.atan2(normal_y, normal_x)
+        # 6. Extraer el ángulo de Yaw (rotación en Z) de la matriz de rotación final.
+        angulo_rad = math.atan2(R_puerta_a_mundo[1, 0], R_puerta_a_mundo[0, 0])
         return math.degrees(angulo_rad)
 
     def publicar_punto_y_angulo(self, punto, angulo):

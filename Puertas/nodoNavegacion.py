@@ -71,11 +71,6 @@ class NodoNavegacion(Node):
         punto_puerta_recibido = np.array(msg.data[0:3])
         angulo_recibido_deg = float(msg.data[3])
 
-        for puerta_visitada in self.puertas_visitadas:
-            if np.linalg.norm(punto_puerta_recibido - puerta_visitada) < DISTANCIA_NUEVA_PUERTA_M:
-                self.get_logger().info(f"Puerta en {punto_puerta_recibido} ya ha sido visitada; ignorada")
-                return
-            
         if self.mision_en_curso:
             punto_central_actual = self.puntos_trayectoria_actual[1]
             if np.linalg.norm(punto_puerta_recibido - punto_central_actual) < DISTANCIA_NUEVA_PUERTA_M:
@@ -106,7 +101,12 @@ class NodoNavegacion(Node):
 
                 self.publicar_marcadores_rviz()
                 return
-
+            
+        for puerta_visitada in self.puertas_visitadas:
+            if np.linalg.norm(punto_puerta_recibido - puerta_visitada) < DISTANCIA_NUEVA_PUERTA_M:
+                self.get_logger().info(f"Puerta en {punto_puerta_recibido} ya ha sido visitada; ignorada")
+                return
+            
         for i in range(0, len(self.cola_puertas), 2):
             punto_en_cola = self.cola_puertas[i]
             if np.linalg.norm(punto_puerta_recibido - punto_en_cola) < DISTANCIA_NUEVA_PUERTA_M:
