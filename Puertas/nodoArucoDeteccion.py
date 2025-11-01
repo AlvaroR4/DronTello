@@ -88,25 +88,27 @@ class NodoDeteccionAruco(Node):
 
         if ids is not None:
             rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(corners, MARKER_SIZE, self.camera_matrix, self.dist_coeffs)
-            rvec, tvec = rvecs[0], tvecs[0]
             
-            cv2.drawFrameAxes(frame_bgr, self.camera_matrix, self.dist_coeffs, rvec, tvec, 0.1)
-
-            esquinas = corners[0].reshape((4, 2))
-            cx, cy = int(np.mean(esquinas[:, 0])), int(np.mean(esquinas[:, 1]))
-            lado_px = np.linalg.norm(esquinas[0] - esquinas[1])
-            distancia = (MARKER_SIZE * FOCAL_PIXELS) / lado_px if lado_px > 0 else 0
-
-            if distancia > 0:
-                punto_cuerpo = self.punto_imagen_a_punto_cuerpo(cx, cy, distancia)
-                punto_mundo, R_dron_a_mundo = self.transformar_punto_cuerpo_a_mundo(punto_cuerpo)
-                angulo_global_puerta = self.calcular_angulo_global_puerta(rvec, R_dron_a_mundo)
-
-                self.publicar_punto_mundo(punto_mundo, msg_imagen.header.stamp)
-                self.publicar_punto_y_angulo(punto_mundo, angulo_global_puerta)
-                self.get_logger().info(f"Mundo: ({punto_mundo[0]:.2f}, {punto_mundo[1]:.2f}, {punto_mundo[2]:.2f})")
+            for i, id_marcador in enumerate(ids):
+                rvec, tvec = rvecs[i], tvecs[i]
+                esquinas = corners[i].reshape((4, 2))
                 
-                self.dibujar_info(frame_bgr, esquinas, ids[0], distancia, punto_mundo, angulo_global_puerta)
+                cv2.drawFrameAxes(frame_bgr, self.camera_matrix, self.dist_coeffs, rvec, tvec, 0.1)
+
+                cx, cy = int(np.mean(esquinas[:, 0])), int(np.mean(esquinas[:, 1]))
+                lado_px = np.linalg.norm(esquinas[0] - esquinas[1])
+                distancia = (MARKER_SIZE * FOCAL_PIXELS) / lado_px if lado_px > 0 else 0
+
+                if distancia > 0:
+                    punto_cuerpo = self.punto_imagen_a_punto_cuerpo(cx, cy, distancia)
+                    punto_mundo, R_dron_a_mundo = self.transformar_punto_cuerpo_a_mundo(punto_cuerpo)
+                    angulo_global_puerta = self.calcular_angulo_global_puerta(rvec, R_dron_a_mundo)
+
+                    self.publicar_punto_mundo(punto_mundo, msg_imagen.header.stamp)
+                    self.publicar_punto_y_angulo(punto_mundo, angulo_global_puerta)
+                    self.get_logger().info(f"ID:{id_marcador[0]} -> Mundo: ({punto_mundo[0]:.2f}, {punto_mundo[1]:.2f}, {punto_mundo[2]:.2f})")
+                    
+                    self.dibujar_info(frame_bgr, esquinas, ids[0], distancia, punto_mundo, angulo_global_puerta)
 
         msg_debug = self.bridge.cv2_to_imgmsg(frame_bgr, encoding="bgr8")
         msg_debug.header = msg_imagen.header
