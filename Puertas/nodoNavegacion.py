@@ -50,9 +50,17 @@ class NodoNavegacion(Node):
         self.pub_marcadores = self.create_publisher(MarkerArray, '/trayectoria_visual', qos_marcadores)
 
         self.timer_control = self.create_timer(1.0 / 20.0, self.bucle_de_control)
+        self.timer_info = self.create_timer(1.0, self.imprimir_info)
         self.enviar_comando_despegue()
         self.get_logger().info("Nodo de Navegación iniciado. Esperando detección de puertas.")
     
+    def imprimir_info(self):
+        self.get_logger().info(f"--------")
+        self.get_logger().info(f"Cola puertas = {self.cola_puertas}")
+        self.get_logger().info(f"Puertas visitadas = {self.puertas_visitadas}")
+        self.get_logger().info(f"Trayectoria = {self.puntos_trayectoria_actual}")
+        self.get_logger().info(f"--------")
+
     def enviar_comando_despegue(self):
         self.get_logger().info("Enviando comando de despegue")
         msg = Float32MultiArray(data=[2.0, 2.0, 2.0, 0.0])

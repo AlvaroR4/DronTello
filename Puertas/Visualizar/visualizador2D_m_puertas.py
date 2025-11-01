@@ -16,15 +16,12 @@ class Visualizador2D(Node):
         # --- Datos para el gráfico ---
         self.historial_dron_x = []
         self.historial_dron_y = []
-        
-        # Lista unificada para todas las puertas detectadas
         self.puertas_detectadas = [] # Almacena tuplas: ((x, y), angulo_rad)
-        
-        # Datos del dron para dibujar el yaw
         self.posicion_dron_actual = None
         self.yaw_dron_rad = 0.0
+        self.altura_dron_z = 0.0
         
-        # Lógica para reiniciar el gráfico si el dron vuelve al inicio
+        # Lógica para reiniciar el gráfico
         self.posicion_inicial_dron = None
         self.se_ha_alejado = False
         self.UMBRAL_ALEJADO_M = 1.0 
@@ -38,24 +35,31 @@ class Visualizador2D(Node):
         plt.ion()
         self.fig, self.ax = plt.subplots()
         
+        # MODIFICACIÓN: Ajustar el subplot para dejar espacio a la derecha
+        self.fig.subplots_adjust(right=0.75)
+
         # --- Elementos del Gráfico ---
         self.linea_dron, = self.ax.plot([], [], 'b-', label='Trayectoria dron', zorder=20)
         self.puntos_puertas, = self.ax.plot([], [], 'y*', markersize=15, label='Puertas', zorder=10)
-        
-        # CORRECCIÓN: Se restaura el label para la línea cian
         self.lineas_angulos_puertas, = self.ax.plot([], [], 'c-', linewidth=2, label='Vector normal puerta')
-        
         self.linea_yaw_dron, = self.ax.plot([], [], 'r-', linewidth=2, label='Yaw Dron', zorder=15)
+
+        # MODIFICACIÓN: Mover el texto de la altura a la derecha, fuera del gráfico
+        self.altura_texto = self.ax.text(1.05, 0.95, '', transform=self.ax.transAxes, fontsize=12,
+                                        verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
         # --- Estilo del Gráfico ---
         self.ax.set_xlabel("Eje X (Mundo) - Adelante/Atrás")
         self.ax.set_ylabel("Eje Y (Mundo) - Derecha/Izquierda")
         self.ax.set_title("Visualización de Trayectoria 2D (XY)")
-        self.ax.legend()
         self.ax.grid(True)
         self.ax.set_aspect('equal', adjustable='box')
+        
+        # MODIFICACIÓN: Mover la leyenda a la derecha, fuera del gráfico
+        self.ax.legend(loc='upper left', bbox_to_anchor=(1.05, 0.8))
 
-        self.timer = self.create_timer(0.1, self.actualizar_grafico) # Aumentamos frecuencia para un yaw más fluido
+
+        self.timer = self.create_timer(0.1, self.actualizar_grafico)
         self.get_logger().info("Visualizador 2D iniciado. Esperando datos...")
 
     def reset_plot(self):
@@ -66,14 +70,15 @@ class Visualizador2D(Node):
         self.posicion_inicial_dron = None
         self.se_ha_alejado = False
         self.posicion_dron_actual = None
+        self.altura_dron_z = 0.0
 
     def pose_callback(self, msg):
-        if len(msg.data) >= 6: # Necesitamos hasta el yaw
+        if len(msg.data) >= 6:
             pos_actual = np.array([msg.data[0], msg.data[1]])
-            self.posicion_dron_actual = pos_actual # Guardamos la posición actual
-            self.yaw_dron_rad = math.radians(msg.data[5]) # Guardamos el yaw en radianes
+            self.altura_dron_z = msg.data[2]
+            self.posicion_dron_actual = pos_actual
+            self.yaw_dron_rad = math.radians(msg.data[5])
             
-            # --- Lógica de reinicio ---
             if self.posicion_inicial_dron is None:
                 self.posicion_inicial_dron = pos_actual
 
@@ -92,7 +97,6 @@ class Visualizador2D(Node):
         if len(msg.data) >= 4:
             punto_nuevo = (msg.data[0], msg.data[1])
             
-            # Comprobamos si la puerta detectada ya está en nuestra lista para no repetirla
             es_puerta_realmente_nueva = True
             for punto_existente, _ in self.puertas_detectadas:
                 distancia = math.dist(punto_nuevo, punto_existente)
@@ -106,17 +110,13 @@ class Visualizador2D(Node):
                 self.puertas_detectadas.append((punto_nuevo, angulo_rad))
 
     def actualizar_grafico(self):
-        # Dibuja la trayectoria del dron
         self.linea_dron.set_data(self.historial_dron_x, self.historial_dron_y)
         
-        # Dibuja todas las puertas y sus ángulos
         if self.puertas_detectadas:
-            # Dibuja las estrellas amarillas
             puertas_x = [p[0][0] for p in self.puertas_detectadas]
             puertas_y = [p[0][1] for p in self.puertas_detectadas]
             self.puntos_puertas.set_data(puertas_x, puertas_y)
 
-            # Dibuja las líneas de ángulo cian
             lineas_x_todas = []
             lineas_y_todas = []
             for punto, angulo in self.puertas_detectadas:
@@ -130,15 +130,15 @@ class Visualizador2D(Node):
             
             self.lineas_angulos_puertas.set_data(lineas_x_todas, lineas_y_todas)
 
-        # Dibuja el vector de yaw del dron
         if self.posicion_dron_actual is not None:
             px, py = self.posicion_dron_actual
-            longitud_vector = 0.4 # Un poco más corto para diferenciarlo
+            longitud_vector = 0.4
             dx = math.cos(self.yaw_dron_rad) * longitud_vector
             dy = math.sin(self.yaw_dron_rad) * longitud_vector
             self.linea_yaw_dron.set_data([px, px + dx], [py, py + dy])
 
-        # Actualiza la vista del gráfico
+        self.altura_texto.set_text(f'Altura Dron (Z): {self.altura_dron_z:.2f} m')
+
         self.ax.relim()
         self.ax.autoscale_view()
         self.fig.canvas.draw()

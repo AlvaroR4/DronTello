@@ -18,9 +18,9 @@ class PublicadorVelocidad(Node):
         msg = Float32MultiArray()
         msg.data = [1.40, 0.50, -1.30, 26.0]
         self.pub_punto_angulo.publish(msg)
-        msg.data = [3.40, 2.50, -1.30, 49.0]
+        msg.data = [3.40, 2.50, -3.30, 49.0]
         self.pub_punto_angulo.publish(msg)
-        msg.data = [5.40, -1.50, -1.30, -89.0]
+        msg.data = [5.40, -1.50, -1.30, -120.0]
         self.pub_punto_angulo.publish(msg)
 
 
