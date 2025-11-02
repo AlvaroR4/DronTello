@@ -6,8 +6,9 @@ import numpy as np
 import math
 
 # --- PARÁMETROS ---
-# Distancia mínima para considerar una detección como una puerta nueva y no una repetida
-DISTANCIA_MINIMA_NUEVA_PUERTA = 0.5 # en metros
+# Distancia mínima para considerar una detección como una puerta existente y promediar
+# Debería ser similar a DISTANCIA_NUEVA_PUERTA_M en nodoNavegacion.py
+DISTANCIA_PROMEDIO_PUERTA = 1.0 # en metros
 
 class Visualizador2D(Node):
     def __init__(self):
@@ -16,7 +17,7 @@ class Visualizador2D(Node):
         # --- Datos para el gráfico ---
         self.historial_dron_x = []
         self.historial_dron_y = []
-        self.puertas_detectadas = [] # Almacena tuplas: ((x, y), angulo_rad)
+        self.puertas_detectadas = [] # Almacena tuplas: [(x, y), angulo_rad]
         self.posicion_dron_actual = None
         self.yaw_dron_rad = 0.0
         self.altura_dron_z = 0.0
@@ -35,7 +36,6 @@ class Visualizador2D(Node):
         plt.ion()
         self.fig, self.ax = plt.subplots()
         
-        # MODIFICACIÓN: Ajustar el subplot para dejar espacio a la derecha
         self.fig.subplots_adjust(right=0.75)
 
         # --- Elementos del Gráfico ---
@@ -44,7 +44,6 @@ class Visualizador2D(Node):
         self.lineas_angulos_puertas, = self.ax.plot([], [], 'c-', linewidth=2, label='Vector normal puerta')
         self.linea_yaw_dron, = self.ax.plot([], [], 'r-', linewidth=2, label='Yaw Dron', zorder=15)
 
-        # MODIFICACIÓN: Mover el texto de la altura a la derecha, fuera del gráfico
         self.altura_texto = self.ax.text(1.05, 0.95, '', transform=self.ax.transAxes, fontsize=12,
                                         verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
@@ -55,9 +54,7 @@ class Visualizador2D(Node):
         self.ax.grid(True)
         self.ax.set_aspect('equal', adjustable='box')
         
-        # MODIFICACIÓN: Mover la leyenda a la derecha, fuera del gráfico
         self.ax.legend(loc='upper left', bbox_to_anchor=(1.05, 0.8))
-
 
         self.timer = self.create_timer(0.1, self.actualizar_grafico)
         self.get_logger().info("Visualizador 2D iniciado. Esperando datos...")
@@ -94,39 +91,63 @@ class Visualizador2D(Node):
             self.historial_dron_y.append(pos_actual[1])
 
     def puerta_callback(self, msg):
-        if len(msg.data) >= 4:
-            punto_nuevo = (msg.data[0], msg.data[1])
+        if len(msg.data) < 4:
+            return
+
+        punto_nuevo_xy = (msg.data[0], msg.data[1])
+        angulo_nuevo_rad = math.radians(msg.data[3])
+        
+        puerta_actualizada = False
+        # Buscamos si la puerta detectada ya está en nuestra lista
+        for i, (punto_existente_xy, angulo_existente_rad) in enumerate(self.puertas_detectadas):
+            distancia = math.dist(punto_nuevo_xy, punto_existente_xy)
             
-            es_puerta_realmente_nueva = True
-            for punto_existente, _ in self.puertas_detectadas:
-                distancia = math.dist(punto_nuevo, punto_existente)
-                if distancia < DISTANCIA_MINIMA_NUEVA_PUERTA:
-                    es_puerta_realmente_nueva = False
-                    break
-            
-            if es_puerta_realmente_nueva:
-                self.get_logger().info(f"Nueva puerta detectada y añadida: {punto_nuevo}")
-                angulo_rad = math.radians(msg.data[3])
-                self.puertas_detectadas.append((punto_nuevo, angulo_rad))
+            if distancia < DISTANCIA_PROMEDIO_PUERTA:                
+                # 1. Promediar la posición
+                px_promedio = (punto_existente_xy[0] + punto_nuevo_xy[0]) / 2.0
+                py_promedio = (punto_existente_xy[1] + punto_nuevo_xy[1]) / 2.0
+                punto_promedio = (px_promedio, py_promedio)
+
+                # 2. Promediar el ángulo de forma robusta (usando vectores)
+                avg_cos = (math.cos(angulo_existente_rad) + math.cos(angulo_nuevo_rad)) / 2.0
+                avg_sin = (math.sin(angulo_existente_rad) + math.sin(angulo_nuevo_rad)) / 2.0
+                angulo_promedio_rad = math.atan2(avg_sin, avg_cos)
+
+                # 3. Actualizar la entrada en la lista
+                self.puertas_detectadas[i] = (punto_promedio, angulo_promedio_rad)
+                self.get_logger().info(f"Puerta en {punto_existente_xy} actualizada a {punto_promedio}")
+
+                puerta_actualizada = True
+                break # Salimos del bucle una vez que encontramos y actualizamos la puerta
+        
+        # Si después de recorrer toda la lista no encontramos una puerta cercana, es nueva
+        if not puerta_actualizada:
+            self.get_logger().info(f"Nueva puerta detectada y añadida: {punto_nuevo_xy}")
+            self.puertas_detectadas.append((punto_nuevo_xy, angulo_nuevo_rad))
 
     def actualizar_grafico(self):
         self.linea_dron.set_data(self.historial_dron_x, self.historial_dron_y)
         
         if self.puertas_detectadas:
-            puertas_x = [p[0][0] for p in self.puertas_detectadas]
-            puertas_y = [p[0][1] for p in self.puertas_detectadas]
+            # Desempaquetamos los datos de la lista de tuplas
+            puertas_puntos = [p[0] for p in self.puertas_detectadas]
+            puertas_angulos = [p[1] for p in self.puertas_detectadas]
+
+            puertas_x = [p[0] for p in puertas_puntos]
+            puertas_y = [p[1] for p in puertas_puntos]
             self.puntos_puertas.set_data(puertas_x, puertas_y)
 
             lineas_x_todas = []
             lineas_y_todas = []
-            for punto, angulo in self.puertas_detectadas:
+            for punto, angulo in zip(puertas_puntos, puertas_angulos):
                 px, py = punto
                 longitud_vector = 0.5
                 dx = math.cos(angulo) * longitud_vector
                 dy = math.sin(angulo) * longitud_vector
                 
-                lineas_x_todas.extend([px - dx, px + dx, None])
-                lineas_y_todas.extend([py - dy, py + dy, None])
+                # Se dibuja una línea centrada en el punto de la puerta
+                lineas_x_todas.extend([px - dx/2, px + dx/2, None])
+                lineas_y_todas.extend([py - dy/2, py + dy/2, None])
             
             self.lineas_angulos_puertas.set_data(lineas_x_todas, lineas_y_todas)
 
@@ -143,6 +164,7 @@ class Visualizador2D(Node):
         self.ax.autoscale_view()
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
+
 
 def main(args=None):
     rclpy.init(args=args)
