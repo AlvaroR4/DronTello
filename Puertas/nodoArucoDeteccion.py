@@ -134,21 +134,25 @@ class NodoDeteccionAruco(Node):
         R_marcador_a_camara, _ = cv2.Rodrigues(rvec_marcador_camara)
 
         # 2. Matriz de corrección fija que transforma de ejes CÁMARA a ejes DRON (FRD)
-        # x_dron = z_cam, y_dron = x_cam, z_dron = y_cam
         R_camara_a_dron = np.array([
             [0, 0, 1],  # El eje X del dron es el Z de la cámara
             [1, 0, 0],  # El eje Y del dron es el X de la cámara
             [0, 1, 0]   # El eje Z del dron es el Y de la cámara
         ])
+        
         # 3. Calcular la rotación del marcador con respecto al MUNDO
-        # R_marcador_a_mundo = R_dron_a_mundo @ R_marcador_a_dron
-        # R_marcador_a_dron = R_camara_a_dron @ R_marcador_a_camara
         R_marcador_a_mundo = R_dron_a_mundo @ R_camara_a_dron @ R_marcador_a_camara
         
-        # 4. Extraer el ángulo de Yaw de la matriz de rotación global final
-        yaw_rad = math.atan2(R_marcador_a_mundo[1, 0], R_marcador_a_mundo[0, 0])
+        # 4. EXTRAER EL VECTOR DEL EJE Z Y CALCULAR SU YAW
+        # La tercera columna (índice 2) de la matriz de rotación es el vector del eje Z
+        # del marcador, expresado en coordenadas del mundo. ¡Este es el vector normal!
+        vector_normal_mundo = R_marcador_a_mundo[:, 2]
+        
+        # Calculamos el ángulo yaw de este vector en el plano XY del mundo
+        yaw_rad = math.atan2(vector_normal_mundo[1], vector_normal_mundo[0])
+        
         return math.degrees(yaw_rad)
-
+    
     def publicar_punto_mundo(self, punto, stamp):
         msg = PointStamped()
         msg.header.stamp, msg.header.frame_id = stamp, 'map'

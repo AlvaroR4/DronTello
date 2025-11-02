@@ -222,7 +222,7 @@ class NodoNavegacion(Node):
             self.detener_dron()
             return True
         
-        rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA)
+        rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA_YAW)
         self.enviar_comando_velocidad(0, 0, 0, rotacion)
         return False
 
