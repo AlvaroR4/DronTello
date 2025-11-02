@@ -47,10 +47,6 @@ class NodoDeteccionAruco(Node):
             [0, 0, 1]
         ])
         self.dist_coeffs = np.zeros((1, 5))
-
-        self.TAMAÑO_BUFFER_MEDIA = 10
-        # Buffer para almacenar los resultados [x, y, z, angulo]
-        self.resultados_buffer = []
         
         qos_best_effort = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
         qos_reliable = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST, depth=10)

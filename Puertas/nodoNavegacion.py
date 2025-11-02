@@ -9,8 +9,8 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 DISTANCIA_APROXIMACION_M = 0.40 #distancia P'
 DISTANCIA_SALIDA_M = 0.4 #distancia P''
 MARGEN_ALTURA_M = 0.50 #aumentar altura del P
-AUMENTAR_VELOCIDAD = 30.0
-AUMENTAR_YAW = 1.0
+AUMENTAR_VELOCIDAD = 40.0
+AUMENTAR_YAW = 2.5
 VELOCIDAD_MAXIMA_YAW = 5.0 
 VELOCIDAD_MAXIMA = 20
 DISTANCIA_NUEVA_PUERTA_M = 1.0 #para que un P sea admitido como nueva puerta
@@ -82,8 +82,6 @@ class NodoNavegacion(Node):
         if self.mision_en_curso:
             punto_central_actual = self.puntos_trayectoria_actual[1]
             if np.linalg.norm(punto_puerta_recibido - punto_central_actual) < DISTANCIA_NUEVA_PUERTA_M:
-                self.get_logger().info("Calculando nueva trayectoria")
-
                 angulo_actual_deg = self.puntos_trayectoria_actual[3]
                 
                 punto_central_nuevo = (punto_central_actual + punto_puerta_recibido) / 2.0
@@ -112,14 +110,11 @@ class NodoNavegacion(Node):
             
         for puerta_visitada in self.puertas_visitadas:
             if np.linalg.norm(punto_puerta_recibido - puerta_visitada) < DISTANCIA_NUEVA_PUERTA_M:
-                self.get_logger().info(f"Puerta en {punto_puerta_recibido} ya ha sido visitada; ignorada")
                 return
             
         for i in range(0, len(self.cola_puertas), 2):
             punto_en_cola = self.cola_puertas[i]
-            if np.linalg.norm(punto_puerta_recibido - punto_en_cola) < DISTANCIA_NUEVA_PUERTA_M:
-                self.get_logger().info(f"Actualizando una puerta en la cola.")
-                
+            if np.linalg.norm(punto_puerta_recibido - punto_en_cola) < DISTANCIA_NUEVA_PUERTA_M:                
                 nuevo_punto_promedio = (punto_en_cola + punto_puerta_recibido) / 2.0
                 self.cola_puertas[i] = nuevo_punto_promedio
 
@@ -128,8 +123,6 @@ class NodoNavegacion(Node):
                 self.cola_puertas[i+1] = nuevo_angulo_promedio
                 
                 return 
-
-        self.get_logger().info(f"Nueva puerta añadida a la cola en {punto_puerta_recibido}")
         self.cola_puertas.append(punto_puerta_recibido)
         self.cola_puertas.append(angulo_recibido_deg)
 
@@ -138,7 +131,7 @@ class NodoNavegacion(Node):
             return
 
         if not self.mision_en_curso and len(self.cola_puertas) > 0:
-            self.get_logger().info("Tarea finalizada. Buscando siguiente puerta en la cola")
+            self.get_logger().info("Buscando siguiente puerta en la cola")
             punto_central_puerta = self.cola_puertas.pop(0)
             angulo_objetivo_deg = self.cola_puertas.pop(0)
 
