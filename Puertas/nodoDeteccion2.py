@@ -87,6 +87,23 @@ class ModuloLocalizacion(Node):
         self.pitch = 0.0
         self.yaw = 0.0
 
+        self.camera_matrix = np.array([
+            [FOCAL, 0, ANCHO_IMAGEN / 2],
+            [0, FOCAL, ALTO_IMAGEN / 2],
+            [0, 0, 1]
+        ], dtype=np.float32)
+        self.dist_coeffs = np.zeros((1, 5)) 
+
+        ancho_mitad = ANCHO_REAL / 2.0
+        alto_mitad = ALTO_REAL / 2.0
+        self.puntos_objeto_3d = np.array([
+            [-ancho_mitad,  alto_mitad, 0.0], # Esquina superior izquierda (esq4)
+            [ ancho_mitad,  alto_mitad, 0.0], # Esquina superior derecha (esq3)
+            [ ancho_mitad, -alto_mitad, 0.0], # Esquina inferior derecha (esq2)
+            [-ancho_mitad, -alto_mitad, 0.0]  # Esquina inferior izquierda (esq1)
+        ], dtype=np.float32)
+
+
         qos_profile_pub_data = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
