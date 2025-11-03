@@ -16,7 +16,7 @@ class PublicadorVelocidad(Node):
     
     def publicar_punto_y_angulo(self):
         msg = Float32MultiArray()
-        msg.data = [1.40, 0.50, -1.30, 26.0]
+        msg.data = [1.21, 0.44, -1.12, -163.6]
         self.pub_punto_angulo.publish(msg)
         msg.data = [3.40, 2.50, -3.30, 49.0]
         self.pub_punto_angulo.publish(msg)

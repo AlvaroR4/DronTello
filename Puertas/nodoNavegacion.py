@@ -9,8 +9,8 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 DISTANCIA_APROXIMACION_M = 0.40 #distancia P'
 DISTANCIA_SALIDA_M = 0.4 #distancia P''
 MARGEN_ALTURA_M = 0.50 #aumentar altura del P
-AUMENTAR_VELOCIDAD = 40.0
-AUMENTAR_YAW = 2.5
+AUMENTAR_VELOCIDAD = 100.0
+AUMENTAR_YAW = 4.0
 VELOCIDAD_MAXIMA_YAW = 5.0 
 VELOCIDAD_MAXIMA = 20
 DISTANCIA_NUEVA_PUERTA_M = 1.0 #para que un P sea admitido como nueva puerta
@@ -90,7 +90,8 @@ class NodoNavegacion(Node):
                     if np.array_equal(puerta_visitada, punto_central_actual):
                         self.puertas_visitadas[i] = punto_central_nuevo
                         break
-
+                
+                punto_central_nuevo[2] = punto_central_nuevo[2] - MARGEN_ALTURA_M
                 angulo_nuevo_deg = (angulo_actual_deg + angulo_recibido_deg) / 2.0
                 angulo_nuevo_rad = math.radians(angulo_nuevo_deg)
 

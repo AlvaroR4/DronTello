@@ -21,7 +21,7 @@ ANCHO_IMAGEN = 960
 ALTO_IMAGEN = 720
 
 FOCAL_PIXELS = 617.0
-MARKER_SIZE = 0.175
+MARKER_SIZE = 0.167
 
 ARUCO_DICT = cv2.aruco.DICT_5X5_250
 
@@ -147,6 +147,7 @@ class NodoDeteccionAruco(Node):
         # La tercera columna (índice 2) de la matriz de rotación es el vector del eje Z
         # del marcador, expresado en coordenadas del mundo. ¡Este es el vector normal!
         vector_normal_mundo = R_marcador_a_mundo[:, 2]
+        vector_normal_mundo = -vector_normal_mundo
         
         # Calculamos el ángulo yaw de este vector en el plano XY del mundo
         yaw_rad = math.atan2(vector_normal_mundo[1], vector_normal_mundo[0])
