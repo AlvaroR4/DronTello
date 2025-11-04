@@ -21,7 +21,7 @@ ANCHO_IMAGEN = 960
 ALTO_IMAGEN = 720
 
 FOCAL_PIXELS = 617.0
-MARKER_SIZE = 0.167
+MARKER_SIZE = 0.17
 
 ARUCO_DICT = cv2.aruco.DICT_5X5_250
 
@@ -71,7 +71,8 @@ class NodoDeteccionAruco(Node):
 
     def callback_procesamiento_imagen(self, msg_imagen):
         if not self.primera_pose_recibida: 
-            return
+            pass
+            #return
         try:
             frame_bgr = self.bridge.imgmsg_to_cv2(msg_imagen, desired_encoding="bgr8")
             frame_bgr = cv2.resize(frame_bgr, (ANCHO_IMAGEN, ALTO_IMAGEN))
@@ -130,26 +131,19 @@ class NodoDeteccionAruco(Node):
         return punto_mundo, R_cuerpo_a_mundo
 
     def calcular_angulo_global_puerta(self, rvec_marcador_camara, R_dron_a_mundo):
-        # 1. Matriz de rotación del marcador con respecto a la CÁMARA
         R_marcador_a_camara, _ = cv2.Rodrigues(rvec_marcador_camara)
 
-        # 2. Matriz de corrección fija que transforma de ejes CÁMARA a ejes DRON (FRD)
         R_camara_a_dron = np.array([
             [0, 0, 1],  # El eje X del dron es el Z de la cámara
             [1, 0, 0],  # El eje Y del dron es el X de la cámara
             [0, 1, 0]   # El eje Z del dron es el Y de la cámara
         ])
         
-        # 3. Calcular la rotación del marcador con respecto al MUNDO
         R_marcador_a_mundo = R_dron_a_mundo @ R_camara_a_dron @ R_marcador_a_camara
         
-        # 4. EXTRAER EL VECTOR DEL EJE Z Y CALCULAR SU YAW
-        # La tercera columna (índice 2) de la matriz de rotación es el vector del eje Z
-        # del marcador, expresado en coordenadas del mundo. ¡Este es el vector normal!
         vector_normal_mundo = R_marcador_a_mundo[:, 2]
         vector_normal_mundo = -vector_normal_mundo
         
-        # Calculamos el ángulo yaw de este vector en el plano XY del mundo
         yaw_rad = math.atan2(vector_normal_mundo[1], vector_normal_mundo[0])
         
         return math.degrees(yaw_rad)

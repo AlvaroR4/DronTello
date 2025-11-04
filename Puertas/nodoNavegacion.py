@@ -7,7 +7,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 DISTANCIA_APROXIMACION_M = 0.40 #distancia P'
-DISTANCIA_SALIDA_M = 0.4 #distancia P''
+DISTANCIA_SALIDA_M = 0.6 #distancia P''
 MARGEN_ALTURA_M = 0.50 #aumentar altura del P
 AUMENTAR_VELOCIDAD = 100.0
 AUMENTAR_YAW = 4.0
@@ -212,8 +212,8 @@ class NodoNavegacion(Node):
                         rotacion = -VELOCIDAD_MAXIMA_YAW
                     else: 
                         rotacion = VELOCIDAD_MAXIMA_YAW
-                        
-        self.enviar_comando_velocidad(lateral, avance, vertical, rotacion)
+        self.detener_dron()                
+        #self.enviar_comando_velocidad(lateral, avance, vertical, rotacion)
         return distancia_al_objetivo < ERROR_POSICION_M
 
     def rotar_a_yaw(self, angulo_objetivo_deg):
