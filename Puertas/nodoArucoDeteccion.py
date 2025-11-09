@@ -129,6 +129,25 @@ class NodoDeteccionAruco(Node):
         R_cuerpo_a_mundo = R_z @ R_y @ R_x
         punto_mundo = self.pos_dron_mundo + R_cuerpo_a_mundo @ punto_cuerpo
         return punto_mundo, R_cuerpo_a_mundo
+    
+    def calcular_angulo_global_puerta2(self, rvec_marcador_camara):
+        R_marcador_a_camara, _ = cv2.Rodrigues(rvec_marcador_camara)
+ 
+        vector_normal_cam = R_marcador_a_camara[:, 2] 
+        
+        vector_normal_hacia_afuera_cam = -vector_normal_cam
+        componente_adelante_dron = vector_normal_hacia_afuera_cam[2]
+        componente_derecha_dron  = vector_normal_hacia_afuera_cam[0]
+
+        yaw_local_rad = math.atan2(componente_derecha_dron, componente_adelante_dron)
+        yaw_local_deg = math.degrees(yaw_local_rad)
+        
+        yaw_global_deg = self.yaw + yaw_local_deg
+        
+        angulo_normalizado = (yaw_global_deg + 180.0) % 360.0 - 180.0
+        
+        return angulo_normalizado
+    
 
     def calcular_angulo_global_puerta(self, rvec_marcador_camara, R_dron_a_mundo):
         R_marcador_a_camara, _ = cv2.Rodrigues(rvec_marcador_camara)
