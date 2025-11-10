@@ -99,7 +99,8 @@ class NodoDeteccionAruco(Node):
                 if distancia > 0:
                     punto_cuerpo = self.punto_imagen_a_punto_cuerpo(cx, cy, distancia)
                     punto_mundo, R_dron_a_mundo = self.transformar_punto_cuerpo_a_mundo(punto_cuerpo)
-                    angulo_global_puerta = self.calcular_angulo_global_puerta(rvec, R_dron_a_mundo)
+                    #angulo_global_puerta = self.calcular_angulo_global_puerta(rvec, R_dron_a_mundo)
+                    angulo_global_puerta = self.calcular_angulo_global_puerta2(rvec)
 
                     self.publicar_punto_mundo(punto_mundo, msg_imagen.header.stamp)
                     self.publicar_punto_y_angulo(punto_mundo, angulo_global_puerta)

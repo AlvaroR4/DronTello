@@ -12,7 +12,7 @@ import math
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
 
-ROS_TOPIC_IMAGEN_RAW_INPUT = 'camera/image_raw'
+ROS_TOPIC_IMAGEN_RAW_INPUT = 'tello/imagen'
 ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
 ROS_TOPIC_IMAGEN_VISUALIZACION_OUTPUT = '/tello/imagen_puertas'
 ROS_TOPIC_POSE_ANGLES = '/tello/pose_corregida'
@@ -25,8 +25,8 @@ COLOR_MAX = np.array([10, 255, 142])
 
 MIN_CORNER_AREA = 100
 
-ALTO_REAL = 0.285
-ANCHO_REAL = 0.21
+ALTO_REAL = 0.56
+ANCHO_REAL = 0.375
 FOCAL = 617.0
 
 class NodoDeteccion(Node):
