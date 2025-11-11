@@ -11,6 +11,7 @@ import traceback
 import math
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
+import itertools
 
 ROS_TOPIC_IMAGEN_RAW_INPUT = 'tello/imagen'
 ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
@@ -19,9 +20,9 @@ ROS_TOPIC_POSE_ANGLES = '/tello/pose_corregida'
 
 ANCHO_IMAGEN = 960
 ALTO_IMAGEN = 720
-
-COLOR_MIN = np.array([0, 191, 63])
-COLOR_MAX = np.array([10, 255, 142])
+TOLERANCIA_PROPORCION = 0.25
+COLOR_MIN = np.array([0, 82, 134])
+COLOR_MAX = np.array([3, 209, 255])
 
 MIN_CORNER_AREA = 100
 
@@ -146,13 +147,14 @@ class NodoDeteccion(Node):
         return punto_mundo, R_cuerpo_a_mundo
 
     def algoritmoDetectarPuertas(self, img_hsv, img_visualizacion):
-        rojo_min1 = np.array([0, 120, 70]) #cambiar esto arriba
-        rojo_max1 = np.array([10, 255, 255])    
-        rojo_min2 = np.array([170, 120, 70])
+        rojo_min1 = np.array([0, 120, 150]) 
+        rojo_max1 = np.array([10, 255, 255]) 
+        rojo_min2 = np.array([170, 120, 150]) 
         rojo_max2 = np.array([179, 255, 255])
         mask1 = cv2.inRange(img_hsv, rojo_min1, rojo_max1)
         mask2 = cv2.inRange(img_hsv, rojo_min2, rojo_max2)
-        mask = mask1 + mask2
+
+        mask = cv2.bitwise_or(mask1, mask2)
     
         puntos_esquinas_detectados = []
         #mask = cv2.inRange(img_hsv, COLOR_MIN, COLOR_MAX)
@@ -163,6 +165,7 @@ class NodoDeteccion(Node):
 
         for cnt in contornos:
             area = cv2.contourArea(cnt)
+            print(f"Area {area}")
             if area > MIN_CORNER_AREA:
                 M = cv2.moments(cnt)
                 if M['m00'] > 0:
@@ -176,9 +179,60 @@ class NodoDeteccion(Node):
 
     def tratarPuerta(self, puntos_esquinas, img_visualizacion):
         puertas = []
+        if len(puntos_esquinas) < 4:
+            return puertas
+        
+        proporcion_ideal = ALTO_REAL / ANCHO_REAL 
+        proporcion_ideal_ajustada = max(proporcion_ideal, 1/proporcion_ideal) 
 
-        if len(puntos_esquinas) >= 4:
-            x_sorted = sorted(puntos_esquinas, key=lambda p: p[0])
+        min_proporcion_aceptable = proporcion_ideal_ajustada * (1 - TOLERANCIA_PROPORCION)
+        max_proporcion_aceptable = proporcion_ideal_ajustada * (1 + TOLERANCIA_PROPORCION)
+
+        mejor_combinacion = None
+        mejor_error_proporcion = float('inf')
+        mejor_rect = None
+
+        for combinacion in itertools.combinations(puntos_esquinas, 4):
+            points_np = np.array(combinacion, dtype=np.int32)
+            rect = cv2.minAreaRect(points_np)
+            (_, (width, height), _) = rect
+
+            if width <= 0 or height <= 0:
+                continue 
+
+            proporcion_detectada = 0
+            if width > height:
+                proporcion_detectada = width / height
+            else:
+                proporcion_detectada = height / width
+            
+            es_proporcion_correcta = (proporcion_detectada >= min_proporcion_aceptable and 
+                                      proporcion_detectada <= max_proporcion_aceptable)
+
+            if es_proporcion_correcta:
+                error_proporcion = abs(proporcion_detectada - proporcion_ideal_ajustada)
+                
+                if error_proporcion < mejor_error_proporcion:
+                    mejor_error_proporcion = error_proporcion
+                    mejor_combinacion = combinacion
+                    mejor_rect = rect
+
+        puntos_esquinas_detectados = [] 
+        
+        if mejor_combinacion is not None:
+            puntos_esquinas_detectados = list(mejor_combinacion)
+            
+            box = cv2.boxPoints(mejor_rect)
+            box = np.int0(box) 
+            cv2.drawContours(img_visualizacion, [box], 0, (255, 0, 0), 2) 
+
+            print(f"Puerta encontrada (de {len(puntos_esquinas)} LEDs). Error prop.: {mejor_error_proporcion:.3f}")
+        else:
+            print(f"Detectados {len(puntos_esquinas)} LEDs, pero ninguna combinación de 4 tiene la proporción correcta.")
+
+
+        if len(puntos_esquinas_detectados) == 4:
+            x_sorted = sorted(puntos_esquinas_detectados, key=lambda p: p[0])
             x_menor, x_menor2, x_menor3, x_menor4 = x_sorted[0:4]
 
             esq1, esq4 = (x_menor, x_menor2) if x_menor[1] > x_menor2[1] else (x_menor2, x_menor)

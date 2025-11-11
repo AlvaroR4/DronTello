@@ -9,10 +9,10 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 DISTANCIA_APROXIMACION_M = 0.40 #distancia P'
 DISTANCIA_SALIDA_M = 0.6 #distancia P''
 MARGEN_ALTURA_M = 0.50 #aumentar altura del P
-AUMENTAR_VELOCIDAD = 100.0
+AUMENTAR_VELOCIDAD = 120.0
 AUMENTAR_YAW = 4.0
 VELOCIDAD_MAXIMA_YAW = 5.0 
-VELOCIDAD_MAXIMA = 20
+VELOCIDAD_MAXIMA = 20.0
 DISTANCIA_NUEVA_PUERTA_M = 1.0 #para que un P sea admitido como nueva puerta
 ERROR_POSICION_M = 0.10 #margen error para considerar que estas un un punto
 ERROR_YAW_DEG = 5.0 #margen error yaw
@@ -212,8 +212,8 @@ class NodoNavegacion(Node):
                         rotacion = -VELOCIDAD_MAXIMA_YAW
                     else: 
                         rotacion = VELOCIDAD_MAXIMA_YAW
-        self.detener_dron()                
-        #self.enviar_comando_velocidad(lateral, avance, vertical, rotacion)
+        #self.detener_dron()                
+        self.enviar_comando_velocidad(lateral, avance, vertical, rotacion)
         return distancia_al_objetivo < ERROR_POSICION_M
 
     def rotar_a_yaw(self, angulo_objetivo_deg):
