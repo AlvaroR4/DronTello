@@ -23,6 +23,21 @@ def rango_velocidad(valor, maximo):
 def normalizar_angulo_deg(angulo):
     return (angulo + 180.0) % 360.0 - 180.0
 
+def promediar_angulos_deg(ang1, ang2):
+    ang1_norm = (ang1 + 180.0) % 360.0 - 180.0
+    ang2_norm = (ang2 + 180.0) % 360.0 - 180.0
+    
+    diff = ang2_norm - ang1_norm
+    
+    if diff > 180:
+        ang2_norm -= 360.0
+    elif diff < -180:
+        ang2_norm += 360.0
+    
+    promedio = (ang1_norm + ang2_norm) / 2.0
+    
+    return (promedio + 180.0) % 360.0 - 180.0
+
 class NodoNavegacion(Node):
     def __init__(self):
         super().__init__('nodo_navegacion')
@@ -32,10 +47,10 @@ class NodoNavegacion(Node):
         self.yaw_dron_deg = 0.0
         self.estado_mision = 'ESPERANDO_PUERTA'
         self.mision_en_curso = False
-        self.puertas_visitadas = []#lista de puertas detectadas
-        self.cola_puertas = []#lista de puertas a navegar, primero punto, siguiente valor su angulo
-        self.puntos_trayectoria_actual = []
-        self.minimo_una_puerta = False #para que minimo atraviese una puerta 
+        self.puertas_visitadas = []  # Lista de puntos 3D de puertas ya visitadas
+        self.cola_puertas = []  # Lista de dicts: [{'punto': np.array([x,y,z]), 'angulo': float}, ...]
+        self.puntos_trayectoria_actual = []  # [punto_aprox, punto_central, punto_salida, angulo]
+        self.minimo_una_puerta = False  # Flag para requerir que atraviese al menos una puerta 
 
         self.sub_pose = self.create_subscription(Float32MultiArray, '/tello/pose_corregida', self.callback_pose_dron, 10)
         self.sub_puerta = self.create_subscription(Float32MultiArray, '/tello/punto_y_angulo', self.callback_nueva_puerta, 10)
@@ -81,20 +96,15 @@ class NodoNavegacion(Node):
 
         if self.mision_en_curso:
             punto_central_actual = self.puntos_trayectoria_actual[1]
-            if np.linalg.norm(punto_puerta_recibido - punto_central_actual) < DISTANCIA_NUEVA_PUERTA_M:
+            distancia_xy = np.linalg.norm(punto_central_actual[:2] - punto_puerta_recibido[:2])
+            
+            if distancia_xy < DISTANCIA_NUEVA_PUERTA_M:
                 angulo_actual_deg = self.puntos_trayectoria_actual[3]
-                
                 punto_central_nuevo = (punto_central_actual + punto_puerta_recibido) / 2.0
-
-                for i, puerta_visitada in enumerate(self.puertas_visitadas):
-                    if np.array_equal(puerta_visitada, punto_central_actual):
-                        self.puertas_visitadas[i] = punto_central_nuevo
-                        break
+                angulo_nuevo_deg = promediar_angulos_deg(angulo_actual_deg, angulo_recibido_deg)
+                punto_central_nuevo[2] = punto_puerta_recibido[2] - MARGEN_ALTURA_M
                 
-                punto_central_nuevo[2] = punto_central_nuevo[2] - MARGEN_ALTURA_M
-                angulo_nuevo_deg = (angulo_actual_deg + angulo_recibido_deg) / 2.0
                 angulo_nuevo_rad = math.radians(angulo_nuevo_deg)
-
                 normal_plano_puerta = np.array([math.cos(angulo_nuevo_rad), math.sin(angulo_nuevo_rad), 0.0])
                 punto_aproximacion_nuevo = punto_central_nuevo - DISTANCIA_APROXIMACION_M * normal_plano_puerta
                 punto_salida_nuevo = punto_central_nuevo + DISTANCIA_SALIDA_M * normal_plano_puerta
@@ -107,25 +117,39 @@ class NodoNavegacion(Node):
                 ]
 
                 self.publicar_marcadores_rviz()
+                self.get_logger().info(f"Puerta refinada: pos={punto_central_nuevo}, yaw={angulo_nuevo_deg:.1f}°")
                 return
             
         for puerta_visitada in self.puertas_visitadas:
-            if np.linalg.norm(punto_puerta_recibido - puerta_visitada) < DISTANCIA_NUEVA_PUERTA_M:
+            distancia_xy = np.linalg.norm(puerta_visitada[:2] - punto_puerta_recibido[:2])
+            if distancia_xy < DISTANCIA_NUEVA_PUERTA_M:
+                self.get_logger().info(f"Puerta ya visitada, ignorada")
                 return
             
-        for i in range(0, len(self.cola_puertas), 2):
-            punto_en_cola = self.cola_puertas[i]
-            if np.linalg.norm(punto_puerta_recibido - punto_en_cola) < DISTANCIA_NUEVA_PUERTA_M:                
+        para_refinar = False
+        for puerta_en_cola in self.cola_puertas:
+            punto_en_cola = puerta_en_cola['punto']
+            distancia_xy = np.linalg.norm(punto_en_cola[:2] - punto_puerta_recibido[:2])
+            if distancia_xy < DISTANCIA_NUEVA_PUERTA_M:
                 nuevo_punto_promedio = (punto_en_cola + punto_puerta_recibido) / 2.0
-                self.cola_puertas[i] = nuevo_punto_promedio
-
-                angulo_en_cola_deg = self.cola_puertas[i+1]
-                nuevo_angulo_promedio = (angulo_en_cola_deg + angulo_recibido_deg) / 2.0
-                self.cola_puertas[i+1] = nuevo_angulo_promedio
+                nuevo_angulo_promedio = promediar_angulos_deg(
+                    puerta_en_cola['angulo'], 
+                    angulo_recibido_deg
+                )
                 
-                return 
-        self.cola_puertas.append(punto_puerta_recibido)
-        self.cola_puertas.append(angulo_recibido_deg)
+                puerta_en_cola['punto'] = nuevo_punto_promedio
+                puerta_en_cola['angulo'] = nuevo_angulo_promedio
+                
+                self.get_logger().info(f"Puerta en cola refinada: pos={nuevo_punto_promedio}, yaw={nuevo_angulo_promedio:.1f}°")
+                para_refinar = True
+                break
+        
+        if not para_refinar:
+            self.cola_puertas.append({
+                'punto': np.copy(punto_puerta_recibido),
+                'angulo': angulo_recibido_deg
+            })
+            self.get_logger().info(f"Nueva puerta agregada a cola: pos={punto_puerta_recibido}, yaw={angulo_recibido_deg:.1f}°")
 
     def bucle_de_control(self):
         if not self.pose_recibida:
@@ -133,32 +157,33 @@ class NodoNavegacion(Node):
 
         if not self.mision_en_curso and len(self.cola_puertas) > 0:
             self.get_logger().info("Buscando siguiente puerta en la cola")
-            punto_central_puerta = self.cola_puertas.pop(0)
-            angulo_objetivo_deg = self.cola_puertas.pop(0)
-
-            self.puertas_visitadas.append(punto_central_puerta)
             
+            puerta_actual = self.cola_puertas.pop(0)
+            punto_central_puerta = np.copy(puerta_actual['punto']) 
+            angulo_objetivo_deg = puerta_actual['angulo']
+
+            self.puertas_visitadas.append(np.copy(punto_central_puerta))
+            
+            punto_central_puerta[2] = punto_central_puerta[2] - MARGEN_ALTURA_M
             angulo_objetivo_rad = math.radians(angulo_objetivo_deg)
 
-            punto_central_puerta[2] -= MARGEN_ALTURA_M
             normal_plano_puerta = np.array([math.cos(angulo_objetivo_rad), math.sin(angulo_objetivo_rad), 0.0])
-            
             punto_aproximacion = punto_central_puerta - DISTANCIA_APROXIMACION_M * normal_plano_puerta
             punto_salida = punto_central_puerta + DISTANCIA_SALIDA_M * normal_plano_puerta
+            
             self.puntos_trayectoria_actual = [punto_aproximacion, punto_central_puerta, punto_salida, angulo_objetivo_deg]
             
             self.publicar_marcadores_rviz()
             
             self.estado_mision = 'IR_A_PUNTO_APROXIMACION'
             self.mision_en_curso = True
-            self.get_logger().info(f"Iniciando trayectoria hacia {punto_central_puerta}. Próximo objetivo: {punto_aproximacion}")
-            return # Salimos para que el siguiente ciclo ya procese el estado
+            self.get_logger().info(f"Iniciando trayectoria. Centro: {punto_central_puerta}, Yaw: {angulo_objetivo_deg:.1f}°")
+            return  
 
-        # Si no hay misión en curso y la cola está vacía, no hacemos nada más
         if not self.mision_en_curso:
             if self.minimo_una_puerta:
                 self.get_logger().info("Cola de puertas vacía. Aterrizando.")
-                self.enviar_comando_velocidad(2, 0, 0, 0) # land
+                self.enviar_comando_velocidad(2, 0, 0, 0)  # land
                 rclpy.shutdown()
             return
 
@@ -183,8 +208,6 @@ class NodoNavegacion(Node):
                 self.publicar_marcadores_rviz(borrar=True)
 
     def ir_a_posicion(self, punto_objetivo, yaw_objetivo_deg=None):
-        #Ejes Mundo: +X (Adelante), +Y (Derecha), +Z (Abajo)
-        #Comandos Dron: avance (Adelante), lateral (Derecha), vertical (Arriba)
         rotacion = 0
         velocidad_deseada = punto_objetivo - self.posicion_dron_mundo
         distancia_al_objetivo = np.linalg.norm(velocidad_deseada)
@@ -204,7 +227,6 @@ class NodoNavegacion(Node):
             lateral *= factor_aumento
             vertical *= -factor_aumento
 
-            #Preparado para moverse a un punto y rotar a la vez en un futuro
             if yaw_objetivo_deg is not None:
                 rotacion = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
                 if abs(rotacion) > VELOCIDAD_MAXIMA_YAW:
