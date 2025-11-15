@@ -19,7 +19,7 @@ ROS_TOPIC_POSE_ANGLES = '/tello/pose_corregida'
 
 ANCHO_IMAGEN = 960
 ALTO_IMAGEN = 720
-TOLERANCIA_PROPORCION = 0.25
+TOLERANCIA_PROPORCION = 0.60
 COLOR_MIN = np.array([0, 82, 134])
 COLOR_MAX = np.array([3, 209, 255])
 
@@ -90,7 +90,7 @@ class NodoDeteccion(Node):
                 self.pos_dron_mundo = np.array([data[0], data[1], data[2]])
                 self.roll = float(data[3])
                 self.pitch = float(data[4])
-                self.yaw = float(data[5])
+                self.yaw = - float(data[5])
         except Exception as e:
             self.get_logger().error(f"Error procesando pose recibida: {e}")
             self.get_logger().error(traceback.format_exc())
@@ -144,44 +144,38 @@ class NodoDeteccion(Node):
         rect[3] = pts[np.argmax(diff)]
         return rect
 
-    def es_rectangulo_valido(self, box, angulo_tol_deg=20.0, lado_ratio_tol=0.35):
+    def es_rectangulo_valido(self, box, paralelismo_tol_deg=30.0, lado_ratio_tol=0.5):
         box = np.array(box, dtype=float)
         vecs = [box[(i + 1) % 4] - box[i] for i in range(4)]
         lens = [np.linalg.norm(v) for v in vecs]
+        
         if any(l == 0 for l in lens):
             return False, float('inf')
 
         vecs_u = [v / l for v, l in zip(vecs, lens)]
 
-        angles = []
-        for i in range(4):
-            dot = np.dot(vecs_u[i], vecs_u[(i + 1) % 4])
-            dot = np.clip(dot, -1.0, 1.0)
-            ang = math.degrees(math.acos(dot))
-            angles.append(ang)
+        cross02 = abs(np.cross(vecs_u[0], vecs_u[2])) 
+        cross13 = abs(np.cross(vecs_u[1], vecs_u[3])) 
+        
+        ratio0 = abs(lens[0] - lens[2]) / max(lens[0], lens[2]) 
+        ratio1 = abs(lens[1] - lens[3]) / max(lens[1], lens[3]) 
 
-        ang_error = sum(abs(a - 90.0) for a in angles) / 4.0
-        ang_max_dev = max(abs(a - 90.0) for a in angles)
+        score = 100.0 * (cross02 + cross13) + 100.0 * (ratio0 + ratio1)
 
-        cross02 = abs(np.cross(vecs_u[0], vecs_u[2]))
-        cross13 = abs(np.cross(vecs_u[1], vecs_u[3]))
-        ratio0 = abs(lens[0] - lens[2]) / max(lens[0], lens[2])
-        ratio1 = abs(lens[1] - lens[3]) / max(lens[1], lens[3])
+        paralelismo_tol_rad = math.sin(math.radians(paralelismo_tol_deg)) 
 
-        score = ang_error + 100.0 * (cross02 + cross13) + 100.0 * (ratio0 + ratio1)
-
-        ang_tol = angulo_tol_deg
-        if ang_error <= ang_tol and ang_max_dev <= ang_tol and cross02 < math.sin(math.radians(ang_tol)) and cross13 < math.sin(math.radians(ang_tol)) and ratio0 <= lado_ratio_tol and ratio1 <= lado_ratio_tol:
+        if cross02 < paralelismo_tol_rad and cross13 < paralelismo_tol_rad and ratio0 <= lado_ratio_tol and ratio1 <= lado_ratio_tol:
             return True, score
+        
         return False, score
 
     def seleccionar_mejor_combinacion(self, puntos_esquinas):
         if len(puntos_esquinas) < 4:
-            return None, None, float('inf')
+            return None, None, float('inf'), None
 
         mejor_error_proporcion = float('inf')
         mejor_rect = None
-        mejor_box = None
+        mejor_combinacion_real = None
 
         proporcion_ideal = ALTO_REAL / ANCHO_REAL
         proporcion_ideal_ajustada = max(proporcion_ideal, 1 / proporcion_ideal)
@@ -190,6 +184,11 @@ class NodoDeteccion(Node):
 
         for combinacion in itertools.combinations(puntos_esquinas, 4):
             points_np = np.array(combinacion, dtype=np.int32)
+            puntos_reales_ordenados = self.ordenar_puntos(points_np)
+            es_rect, score_rect = self.es_rectangulo_valido(puntos_reales_ordenados)
+            if not es_rect:
+                continue
+
             rect = cv2.minAreaRect(points_np)
             (_, (width, height), _) = rect
             if width <= 0 or height <= 0:
@@ -202,40 +201,21 @@ class NodoDeteccion(Node):
 
             if proporcion_detectada < min_proporcion_aceptable or proporcion_detectada > max_proporcion_aceptable:
                 continue
-
-            box = cv2.boxPoints(rect)
-            box_ordered = self.ordenar_puntos(box)
-
-            es_rect, score_rect = self.es_rectangulo_valido(box_ordered)
+                
+                
 
             error_proporcion = abs(proporcion_detectada - proporcion_ideal_ajustada)
-
             if es_rect:
                 combined_error = error_proporcion + 0.001 * score_rect
                 if combined_error < mejor_error_proporcion:
                     mejor_error_proporcion = combined_error
                     mejor_rect = rect
-                    mejor_box = box_ordered
-
-        if mejor_box is None:
-            for combinacion in itertools.combinations(puntos_esquinas, 4):
-                points_np = np.array(combinacion, dtype=np.int32)
-                rect = cv2.minAreaRect(points_np)
-                (_, (width, height), _) = rect
-                if width <= 0 or height <= 0:
-                    continue
-                if width > height:
-                    proporcion_detectada = width / height
-                else:
-                    proporcion_detectada = height / width
-                error_proporcion = abs(proporcion_detectada - proporcion_ideal_ajustada)
-                if error_proporcion < mejor_error_proporcion:
-                    mejor_error_proporcion = error_proporcion
-                    mejor_rect = rect
-                    mejor_box = cv2.boxPoints(rect)
-                    mejor_box = self.ordenar_puntos(mejor_box)
-
-        return mejor_box, mejor_rect, mejor_error_proporcion
+                    mejor_combinacion_real = combinacion
+        if mejor_combinacion_real is None:
+            return None, None, float('inf'), None
+        
+        puntos_reales_ordenados = self.ordenar_puntos(mejor_combinacion_real)
+        return puntos_reales_ordenados, mejor_rect, mejor_error_proporcion, mejor_combinacion_real
 
     def algoritmoDetectarPuertas(self, img_hsv, img_visualizacion):
         rojo_min1 = np.array([0, 120, 150]) 
@@ -272,25 +252,16 @@ class NodoDeteccion(Node):
         if len(puntos_esquinas) < 4:
             return puertas
         
-        mejor_box, mejor_rect, mejor_error_proporcion = self.seleccionar_mejor_combinacion(puntos_esquinas)
+        puntos_reales_ordenados, mejor_rect, mejor_error_proporcion, _ = self.seleccionar_mejor_combinacion(puntos_esquinas)
 
-        puntos_esquinas_detectados = []
-
-        if mejor_box is not None:
-            puntos_esquinas_detectados = [tuple(map(int, p)) for p in mejor_box]
-            box_draw = np.array(mejor_box, dtype=np.int32)
-            cv2.drawContours(img_visualizacion, [box_draw], 0, (255, 0, 0), 2)
+        if puntos_reales_ordenados is not None:
+            puntos_imagen_2d = np.array(puntos_reales_ordenados, dtype=np.float32)
             print(f"Puerta encontrada (de {len(puntos_esquinas)} LEDs). Error prop.: {mejor_error_proporcion:.3f}")
-        else:
-            print(f"Detectados {len(puntos_esquinas)} LEDs, pero ninguna combinación de 4 tiene la proporción correcta o forma un rectángulo aceptable.")
 
-
-        if len(puntos_esquinas_detectados) == 4:
-            puntos_imagen_2d = np.array(puntos_esquinas_detectados, dtype=np.float32)
-            esq1 = tuple(map(int, puntos_imagen_2d[0]))  # Superior izquierda (TL)
-            esq2 = tuple(map(int, puntos_imagen_2d[1]))  # Superior derecha (TR)
-            esq3 = tuple(map(int, puntos_imagen_2d[2]))  # Inferior derecha (BR)
-            esq4 = tuple(map(int, puntos_imagen_2d[3]))  # Inferior izquierda (BL)
+            esq1 = puntos_imagen_2d[0]  # Superior izquierda (TL)
+            esq2 = puntos_imagen_2d[1]  # Superior derecha (TR)
+            esq3 = puntos_imagen_2d[2]  # Inferior derecha (BR)
+            esq4 = puntos_imagen_2d[3]  # Inferior izquierda (BL)
             success, rvec, tvec = cv2.solvePnP(self.puntos_objeto_3d, puntos_imagen_2d, self.camera_matrix, self.dist_coeffs)
             
             if not success:
@@ -310,13 +281,22 @@ class NodoDeteccion(Node):
             vector_normal_mundo = R_puerta_a_mundo[:, 2]
             vector_normal_mundo = -vector_normal_mundo
             angulo_yaw = math.degrees(math.atan2(vector_normal_mundo[1], vector_normal_mundo[0]))
-            angulo_yaw = (angulo_yaw + 180) % 360 - 180
 
+            largo_lado_izq = np.linalg.norm(esq1 - esq4)
+            largo_lado_der = np.linalg.norm(esq2 - esq3)
+
+            if (largo_lado_izq - largo_lado_der) * angulo_yaw < 0:
+                angulo_yaw = -angulo_yaw
+                
+            angulo_yaw = (angulo_yaw + 180) % 360 - 180
+                
             tvec_camara = tvec.reshape(3)
             punto_cuerpo_pnp = np.array([tvec_camara[2], tvec_camara[0], tvec_camara[1]])
-            
-            punto_mundo, _ = self.transformar_punto_cuerpo_a_mundo(punto_cuerpo_pnp)
+            angulo_azimut_rad = math.atan2(punto_cuerpo_pnp[1], punto_cuerpo_pnp[0])
+            angulo_azimut_grados = math.degrees(angulo_azimut_rad)
 
+            punto_mundo, _ = self.transformar_punto_cuerpo_a_mundo(punto_cuerpo_pnp)
+            #self.get_logger().info(f"Relativo: {angulo_yaw:.2f} | Yaw Dron: {self.yaw:.2f} | AZIMUT: {angulo_azimut_grados:.2f}")
             self.distancia_estimada = None
             self.distancia_calculada = np.linalg.norm(punto_cuerpo_pnp)
             self.coordenada_X, self.coordenada_Y, self.coordenada_Z = punto_cuerpo_pnp
