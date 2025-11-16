@@ -263,10 +263,7 @@ class NodoDeteccion(Node):
             
             if not success:
                 return puertas
-            
-            magnitud_grados = math.degrees(rvec)
-            self.get_logger().info(f"==== : {magnitud_grados:.2f} , {rvec}")
-            
+                        
             _, R_dron_a_mundo = self.transformar_punto_cuerpo_a_mundo(np.array([0,0,0]))
             R_puerta_a_camara, _ = cv2.Rodrigues(rvec)
 
@@ -289,7 +286,7 @@ class NodoDeteccion(Node):
             largo2 = min(largo_lado_izq, largo_lado_der)
             nuevo_angulo = 90 * (1 -(largo2/largo1))
 
-            self.get_logger().info(f"==== : {nuevo_angulo:.2f}")
+            #self.get_logger().info(f"==== : {nuevo_angulo:.2f}")
 
             if (largo_lado_izq - largo_lado_der) * angulo_yaw < 0:
                 angulo_yaw = -angulo_yaw
@@ -315,7 +312,7 @@ class NodoDeteccion(Node):
             }
             puertas.append(puerta_detectada)
 
-            self.publicar_punto_a(punto_mundo[0], punto_mundo[1], punto_mundo[2], angulo_yaw)
+            self.publicar_punto_a(punto_mundo[0], punto_mundo[1], punto_mundo[2], nuevo_angulo)
             x_centro_puerta = int(np.mean([p[0] for p in puntos_imagen_2d]))
             y_centro_puerta = int(np.mean([p[1] for p in puntos_imagen_2d]))
             esquinas = [esq1, esq2, esq3, esq4]

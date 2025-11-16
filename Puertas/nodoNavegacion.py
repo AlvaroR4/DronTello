@@ -8,14 +8,14 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 
 DISTANCIA_APROXIMACION_M = 0.40 #distancia P'
 DISTANCIA_SALIDA_M = 0.6 #distancia P''
-MARGEN_ALTURA_M = 0.50 #aumentar altura del P
-AUMENTAR_VELOCIDAD = 120.0
+MARGEN_ALTURA_M = 0.00 #aumentar altura del P
+AUMENTAR_VELOCIDAD = 180.0
 AUMENTAR_YAW = 4.0
 VELOCIDAD_MAXIMA_YAW = 5.0 
-VELOCIDAD_MAXIMA = 20.0
+VELOCIDAD_MAXIMA = 35.0
 DISTANCIA_NUEVA_PUERTA_M = 1.0 #para que un P sea admitido como nueva puerta
-ERROR_POSICION_M = 0.10 #margen error para considerar que estas un un punto
-ERROR_YAW_DEG = 5.0 #margen error yaw
+ERROR_POSICION_M = 0.20 #margen error para considerar que estas un un punto
+ERROR_YAW_DEG = 3.0 #margen error yaw
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -117,7 +117,7 @@ class NodoNavegacion(Node):
                 ]
 
                 self.publicar_marcadores_rviz()
-                self.get_logger().info(f"Puerta refinada: pos={punto_central_nuevo}, yaw={angulo_nuevo_deg:.1f}°")
+                self.get_logger().info(f"Puerta recalculada: pos={punto_central_nuevo}, yaw={angulo_nuevo_deg:.1f}°")
                 return
             
         for puerta_visitada in self.puertas_visitadas:
@@ -139,7 +139,7 @@ class NodoNavegacion(Node):
                 puerta_en_cola['punto'] = nuevo_punto_promedio
                 puerta_en_cola['angulo'] = nuevo_angulo_promedio
                 
-                self.get_logger().info(f"Puerta en cola refinada: pos={nuevo_punto_promedio}, yaw={nuevo_angulo_promedio:.1f}°")
+                self.get_logger().info(f"Puerta en cola recalculada: pos={nuevo_punto_promedio}, yaw={nuevo_angulo_promedio:.1f}°")
                 return
         
         self.cola_puertas.append({
