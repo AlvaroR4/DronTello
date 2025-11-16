@@ -58,8 +58,7 @@ class NodoDeteccion(Node):
         self.coordenada_Z = None
         self.punto_mundo = None
 
-        self.publisher_ = self.create_publisher(PointStamped, '/punto', 10)
-        self.pub_punto_a = self.create_publisher(Float32MultiArray, '/punto_y_angulo', 10)
+        self.pub_punto_a = self.create_publisher(Float32MultiArray, '/tello/punto_y_angulo', 10)
 
         qos_profile_sub = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
         self.suscripcion_imagen = self.create_subscription(Image, ROS_TOPIC_IMAGEN_RAW_INPUT, self.callback_procesamiento_imagen, qos_profile_sub)
@@ -90,7 +89,7 @@ class NodoDeteccion(Node):
                 self.pos_dron_mundo = np.array([data[0], data[1], data[2]])
                 self.roll = float(data[3])
                 self.pitch = float(data[4])
-                self.yaw = - float(data[5])
+                self.yaw = -float(data[5])
         except Exception as e:
             self.get_logger().error(f"Error procesando pose recibida: {e}")
             self.get_logger().error(traceback.format_exc())
@@ -109,7 +108,7 @@ class NodoDeteccion(Node):
             self.get_logger().error(f"Error general en callback_procesamiento_imagen: {e_processing_callback}")
             self.get_logger().error(traceback.format_exc())
 
-    def publicar_punto(self, punto_mundo):
+    def publicar_punto(self, punto_mundo): #este se visualiza en RViz
         msg = PointStamped()
         msg.header.frame_id = 'map'
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -201,8 +200,6 @@ class NodoDeteccion(Node):
 
             if proporcion_detectada < min_proporcion_aceptable or proporcion_detectada > max_proporcion_aceptable:
                 continue
-                
-                
 
             error_proporcion = abs(proporcion_detectada - proporcion_ideal_ajustada)
             if es_rect:
@@ -256,7 +253,7 @@ class NodoDeteccion(Node):
 
         if puntos_reales_ordenados is not None:
             puntos_imagen_2d = np.array(puntos_reales_ordenados, dtype=np.float32)
-            print(f"Puerta encontrada (de {len(puntos_esquinas)} LEDs). Error prop.: {mejor_error_proporcion:.3f}")
+            #print(f"Puerta encontrada (de {len(puntos_esquinas)} LEDs). Error prop.: {mejor_error_proporcion:.3f}")
 
             esq1 = puntos_imagen_2d[0]  # Superior izquierda (TL)
             esq2 = puntos_imagen_2d[1]  # Superior derecha (TR)
@@ -266,7 +263,10 @@ class NodoDeteccion(Node):
             
             if not success:
                 return puertas
-
+            
+            magnitud_grados = math.degrees(rvec)
+            self.get_logger().info(f"==== : {magnitud_grados:.2f} , {rvec}")
+            
             _, R_dron_a_mundo = self.transformar_punto_cuerpo_a_mundo(np.array([0,0,0]))
             R_puerta_a_camara, _ = cv2.Rodrigues(rvec)
 
@@ -281,9 +281,15 @@ class NodoDeteccion(Node):
             vector_normal_mundo = R_puerta_a_mundo[:, 2]
             vector_normal_mundo = -vector_normal_mundo
             angulo_yaw = math.degrees(math.atan2(vector_normal_mundo[1], vector_normal_mundo[0]))
+            
 
             largo_lado_izq = np.linalg.norm(esq1 - esq4)
             largo_lado_der = np.linalg.norm(esq2 - esq3)
+            largo1 = max(largo_lado_izq, largo_lado_der)
+            largo2 = min(largo_lado_izq, largo_lado_der)
+            nuevo_angulo = 90 * (1 -(largo2/largo1))
+
+            self.get_logger().info(f"==== : {nuevo_angulo:.2f}")
 
             if (largo_lado_izq - largo_lado_der) * angulo_yaw < 0:
                 angulo_yaw = -angulo_yaw
@@ -292,8 +298,6 @@ class NodoDeteccion(Node):
                 
             tvec_camara = tvec.reshape(3)
             punto_cuerpo_pnp = np.array([tvec_camara[2], tvec_camara[0], tvec_camara[1]])
-            angulo_azimut_rad = math.atan2(punto_cuerpo_pnp[1], punto_cuerpo_pnp[0])
-            angulo_azimut_grados = math.degrees(angulo_azimut_rad)
 
             punto_mundo, _ = self.transformar_punto_cuerpo_a_mundo(punto_cuerpo_pnp)
             #self.get_logger().info(f"Relativo: {angulo_yaw:.2f} | Yaw Dron: {self.yaw:.2f} | AZIMUT: {angulo_azimut_grados:.2f}")
@@ -311,8 +315,6 @@ class NodoDeteccion(Node):
             }
             puertas.append(puerta_detectada)
 
-
-            self.publicar_punto(punto_mundo)
             self.publicar_punto_a(punto_mundo[0], punto_mundo[1], punto_mundo[2], angulo_yaw)
             x_centro_puerta = int(np.mean([p[0] for p in puntos_imagen_2d]))
             y_centro_puerta = int(np.mean([p[1] for p in puntos_imagen_2d]))

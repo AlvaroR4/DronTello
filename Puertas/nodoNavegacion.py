@@ -84,7 +84,7 @@ class NodoNavegacion(Node):
     def callback_pose_dron(self, msg: Float32MultiArray):
         if len(msg.data) >= 6:
             self.posicion_dron_mundo = np.array(msg.data[0:3])
-            self.yaw_dron_deg = msg.data[5]
+            self.yaw_dron_deg = -msg.data[5]
             self.pose_recibida = True
 
     def callback_nueva_puerta(self, msg: Float32MultiArray):
@@ -126,7 +126,6 @@ class NodoNavegacion(Node):
                 self.get_logger().info(f"Puerta ya visitada, ignorada")
                 return
             
-        para_refinar = False
         for puerta_en_cola in self.cola_puertas:
             punto_en_cola = puerta_en_cola['punto']
             distancia_xy = np.linalg.norm(punto_en_cola[:2] - punto_puerta_recibido[:2])
@@ -141,15 +140,13 @@ class NodoNavegacion(Node):
                 puerta_en_cola['angulo'] = nuevo_angulo_promedio
                 
                 self.get_logger().info(f"Puerta en cola refinada: pos={nuevo_punto_promedio}, yaw={nuevo_angulo_promedio:.1f}°")
-                para_refinar = True
-                break
+                return
         
-        if not para_refinar:
-            self.cola_puertas.append({
-                'punto': np.copy(punto_puerta_recibido),
-                'angulo': angulo_recibido_deg
-            })
-            self.get_logger().info(f"Nueva puerta agregada a cola: pos={punto_puerta_recibido}, yaw={angulo_recibido_deg:.1f}°")
+        self.cola_puertas.append({
+            'punto': np.copy(punto_puerta_recibido),
+            'angulo': angulo_recibido_deg
+        })
+        self.get_logger().info(f"Nueva puerta agregada a cola: pos={punto_puerta_recibido}, yaw={angulo_recibido_deg:.1f}°")
 
     def bucle_de_control(self):
         if not self.pose_recibida:
