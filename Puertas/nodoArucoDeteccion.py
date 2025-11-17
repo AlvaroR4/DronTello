@@ -72,7 +72,7 @@ class NodoDeteccionAruco(Node):
     def callback_procesamiento_imagen(self, msg_imagen):
         if not self.primera_pose_recibida: 
             pass
-            #return
+            #return 
         try:
             frame_bgr = self.bridge.imgmsg_to_cv2(msg_imagen, desired_encoding="bgr8")
             frame_bgr = cv2.resize(frame_bgr, (ANCHO_IMAGEN, ALTO_IMAGEN))
