@@ -62,7 +62,7 @@ class NodoNavegacion(Node):
     def callback_pose_dron(self, msg: Float32MultiArray):
         if len(msg.data) >= 6:
             self.posicion_dron_mundo = np.array(msg.data[0:3])
-            self.yaw_dron_deg = -msg.data[5]
+            self.yaw_dron_deg = msg.data[5]
             self.pose_recibida = True
     
     def promediar_angulos_deg(self, angulo_actual, nuevo_angulo, n_actual, n_nuevo):

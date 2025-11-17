@@ -20,13 +20,15 @@ ROS_TOPIC_POSE_ANGLES = '/tello/pose_corregida'
 ANCHO_IMAGEN = 960
 ALTO_IMAGEN = 720
 TOLERANCIA_PROPORCION = 0.60
-COLOR_MIN = np.array([0, 82, 134])
-COLOR_MAX = np.array([3, 209, 255])
+COLOR_MIN = np.array([0, 100, 100])
+COLOR_MAX = np.array([25, 255, 255])
 
 MIN_CORNER_AREA = 100
 
-ALTO_REAL = 0.56
-ANCHO_REAL = 0.375
+#ALTO_REAL = 0.56
+#ANCHO_REAL = 0.375
+ALTO_REAL = 1.5
+ANCHO_REAL = 1.0
 FOCAL = 617.0
 
 class NodoDeteccion(Node):
@@ -89,7 +91,7 @@ class NodoDeteccion(Node):
                 self.pos_dron_mundo = np.array([data[0], data[1], data[2]])
                 self.roll = float(data[3])
                 self.pitch = float(data[4])
-                self.yaw = -float(data[5])
+                self.yaw = float(data[5])
         except Exception as e:
             self.get_logger().error(f"Error procesando pose recibida: {e}")
             self.get_logger().error(traceback.format_exc())
@@ -215,17 +217,17 @@ class NodoDeteccion(Node):
         return puntos_reales_ordenados, mejor_rect, mejor_error_proporcion, mejor_combinacion_real
 
     def algoritmoDetectarPuertas(self, img_hsv, img_visualizacion):
-        rojo_min1 = np.array([0, 120, 150]) 
-        rojo_max1 = np.array([10, 255, 255]) 
-        rojo_min2 = np.array([170, 120, 150]) 
-        rojo_max2 = np.array([179, 255, 255])
-        mask1 = cv2.inRange(img_hsv, rojo_min1, rojo_max1)
-        mask2 = cv2.inRange(img_hsv, rojo_min2, rojo_max2)
+        #rojo_min1 = np.array([0, 120, 150]) 
+        #rojo_max1 = np.array([10, 255, 255]) 
+        #rojo_min2 = np.array([170, 120, 150]) 
+        #rojo_max2 = np.array([179, 255, 255])
+        #mask1 = cv2.inRange(img_hsv, rojo_min1, rojo_max1)
+        #mask2 = cv2.inRange(img_hsv, rojo_min2, rojo_max2)
 
-        mask = cv2.bitwise_or(mask1, mask2)
+        #mask = cv2.bitwise_or(mask1, mask2)
     
         puntos_esquinas_detectados = []
-        #mask = cv2.inRange(img_hsv, COLOR_MIN, COLOR_MAX)
+        mask = cv2.inRange(img_hsv, COLOR_MIN, COLOR_MAX)
         kernel = np.ones((5,5), np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
