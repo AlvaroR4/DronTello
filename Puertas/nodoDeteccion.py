@@ -279,18 +279,17 @@ class NodoDeteccion(Node):
             
             vector_normal_mundo = R_puerta_a_mundo[:, 2]
             vector_normal_mundo = -vector_normal_mundo
-            angulo_yaw = math.degrees(math.atan2(vector_normal_mundo[1], vector_normal_mundo[0]))
-            
+            #angulo_yaw = math.degrees(math.atan2(vector_normal_mundo[1], vector_normal_mundo[0]))
 
             largo_lado_izq = np.linalg.norm(esq1 - esq4)
             largo_lado_der = np.linalg.norm(esq2 - esq3)
             largo1 = max(largo_lado_izq, largo_lado_der)
             largo2 = min(largo_lado_izq, largo_lado_der)
-            nuevo_angulo = 90 * (1 -(largo2/largo1))
+            angulo_yaw = 90 * (1 -(largo2/largo1))
 
             #self.get_logger().info(f"==== : {nuevo_angulo:.2f}")
 
-            if (largo_lado_izq - largo_lado_der) * angulo_yaw < 0:
+            if (largo_lado_izq > largo_lado_der):
                 angulo_yaw = -angulo_yaw
                 
             angulo_yaw = (angulo_yaw + 180) % 360 - 180
@@ -314,7 +313,7 @@ class NodoDeteccion(Node):
             }
             puertas.append(puerta_detectada)
 
-            self.publicar_punto_a(punto_mundo[0], punto_mundo[1], punto_mundo[2], nuevo_angulo)
+            self.publicar_punto_a(punto_mundo[0], punto_mundo[1], punto_mundo[2], angulo_yaw)
             x_centro_puerta = int(np.mean([p[0] for p in puntos_imagen_2d]))
             y_centro_puerta = int(np.mean([p[1] for p in puntos_imagen_2d]))
             esquinas = [esq1, esq2, esq3, esq4]
