@@ -2,14 +2,19 @@
 import rclpy
 from rclpy.node import Node
 import numpy as np
+import math
 import tf_transformations
 
 from std_msgs.msg import Float32MultiArray
-
 from sensor_msgs.msg import Image 
 from geometry_msgs.msg import Twist 
 from sensor_msgs.msg import Imu  
 from sensor_msgs.msg import NavSatFix 
+
+# Factor para convertir las unidades de "Tello" (0-100 o similar) a m/s reales del Mavic
+# Si tu nodo envía 25, esto lo convierte a 0.5 m/s, que es seguro.
+FACTOR_ESCALA_VELOCIDAD = 0.05 
+FACTOR_ESCALA_YAW = 0.1
 
 class TelloMavicPuente(Node):
     def __init__(self):
@@ -65,20 +70,55 @@ class TelloMavicPuente(Node):
 
         self.timer_pose = self.create_timer(0.05, self.publicar_pose_corregida)
 
-        self.get_logger().info('Nodo Puente Tello <-> Mavic iniciado.')
+        self.get_logger().info('Nodo Puente Tello <-> Mavic iniciado y corregido.')
 
 
     def callback_camara(self, msg_in):
         self.pub_cam_tello.publish(msg_in)
 
     def callback_velocidad(self, msg_in):
+        # Datos recibidos del nodo de navegación (Sistema Mundo + Unidades Tello)
+        # lr = Y mundo, fb = X mundo, ud = Z mundo (invertido), yv = Yaw rate
         lr, fb, ud, yv = msg_in.data
         
+        # 1. Corrección de Signo Z (Altura)
+        # Tu nodo envía negativo para subir. ROS necesita positivo.
+        # Invertimos el signo aquí.
+        cmd_z_mundo = -ud 
+
+        # 2. Corrección de Escala
+        # Convertimos las unidades grandes (ej. 25) a m/s razonables
+        vx_mundo = fb * FACTOR_ESCALA_VELOCIDAD
+        vy_mundo = lr * FACTOR_ESCALA_VELOCIDAD
+        vz_mundo = cmd_z_mundo * FACTOR_ESCALA_VELOCIDAD
+        wz_cuerpo = yv * FACTOR_ESCALA_YAW
+
+        # 3. Transformación de MUNDO a CUERPO
+        # El dron necesita comandos relativos a su frente, no al Norte geográfico.
+        yaw_actual = self.orientacion_actual[2] # En radianes
+        
+        # Fórmula de rotación 2D para pasar de Mundo a Cuerpo
+        # v_x_cuerpo = v_x_mundo * cos(yaw) + v_y_mundo * sin(yaw)
+        # v_y_cuerpo = -v_x_mundo * sin(yaw) + v_y_mundo * cos(yaw)
+        
+        c = math.cos(yaw_actual)
+        s = math.sin(yaw_actual)
+
+        vx_cuerpo = vx_mundo * c + vy_mundo * s
+        vy_cuerpo = -vx_mundo * s + vy_mundo * c
+
+        # Corrección del signo de Yaw (si gira al revés, quita o pon el menos)
+        # Tu nodo envía positivo para girar a un lado, el puente tenía un menos.
+        # Generalmente ROS usa positivo para izquierda (CCW).
+        # Lo ponemos directo (positivo) porque tu lógica parece estándar.
+        wz_final = wz_cuerpo 
+
+        # Crear mensaje Twist para ROS
         msg_out = Twist()
-        msg_out.linear.x = fb  # Tello 'fb' (forward/backward) -> Twist 'linear.x'
-        msg_out.linear.y = -lr # Tello 'lr' (left/right) -> Twist 'linear.y' (ROS es Y-izq)
-        msg_out.linear.z = ud  # Tello 'ud' (up/down) -> Twist 'linear.z'
-        msg_out.angular.z = -yv # Tello 'yv' (yaw) -> Twist 'angular.z' (ROS es Z-CCW)
+        msg_out.linear.x = float(vx_cuerpo)
+        msg_out.linear.y = float(vy_cuerpo)
+        msg_out.linear.z = float(vz_mundo) # Z no necesita rotación 2D
+        msg_out.angular.z = float(wz_final)
         
         self.pub_vel_mavic.publish(msg_out)
 
