@@ -6,6 +6,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projec
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projects/appearances/protos/SandyGround.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projects/objects/factory/manhole/protos/SquareManhole.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projects/robots/dji/mavic/protos/Mavic2Pro.proto"
+EXTERNPROTO "../protos/Puerta.proto"
 
 WorldInfo {
   info [
@@ -19,8 +20,8 @@ WorldInfo {
   }
 }
 Viewpoint {
-  orientation 0.17479523631469282 -0.5559216141535257 -0.812648622886072 5.21613818025977
-  position -5.93267435566507 -14.228822847459975 14.145381074169245
+  orientation -0.23167889924128043 -0.9286541188908874 0.2897005611201641 5.746815930024142
+  position -9.235928078787722 1.7728766361412251 8.080166168059856
   near 0.2
   follow "Mavic 2 PRO"
   followSmoothness 0.2
@@ -57,152 +58,12 @@ Mavic2Pro {
     }
   ]
 }
-DEF Puerta Solid {
-  translation 5 1 2.7
-  rotation 0 1 0 -1.5707996938995747
+Solid {
+  translation 5 1.5 2.7
   children [
-    Pose {
-    }
-    DEF Led Pose {
-      translation 0.1 0 0.04
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 1 0 0
-            emissiveColor 1 0 0
-          }
-          geometry Cylinder {
-            height 0.05
-            radius 0.05
-          }
-        }
-      ]
-    }
-    DEF Led Pose {
-      translation -1.3 0 0.04
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 1 0 0
-            emissiveColor 1 0 0
-          }
-          geometry Cylinder {
-            height 0.05
-            radius 0.05
-          }
-        }
-      ]
-    }
-    DEF Led Pose {
-      translation -1.3 1 0.04
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 1 0 0
-            emissiveColor 1 0 0
-          }
-          geometry Cylinder {
-            height 0.05
-            radius 0.05
-          }
-        }
-      ]
-    }
-    DEF Led Pose {
-      translation 0.1 1 0.04
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 1 0 0
-            emissiveColor 1 0 0
-          }
-          geometry Cylinder {
-            height 0.05
-            radius 0.05
-          }
-        }
-      ]
-    }
-    DEF AltoI Pose {
-      translation -0.6 1 0
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1.5 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF AltoD Pose {
-      translation -0.6 0 0
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1.5 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF AnchoAr Pose {
-      translation 0.1 0.5 0
-      rotation 0 0 1 1.5707996938995747
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF AnchoAb Pose {
-      translation -1.3 0.5 0
-      rotation 0 0 1 1.5707996938995747
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF Palo Pose {
-      translation -2 0.5 0
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1.5 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF Base Pose {
-      translation -2.7 0.5 0
-      rotation 0 1 0 1.5707996938995747
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1 1 0.1
-          }
-        }
-      ]
+    DEF Puerta Puerta {
+      rotation 0 1 0 -1.5708003061004252
     }
   ]
+  name "Puerta"
 }

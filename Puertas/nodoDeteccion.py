@@ -20,8 +20,8 @@ ROS_TOPIC_POSE_ANGLES = '/tello/pose_corregida'
 ANCHO_IMAGEN = 960
 ALTO_IMAGEN = 720
 TOLERANCIA_PROPORCION = 0.60
-COLOR_MIN = np.array([0, 100, 100])
-COLOR_MAX = np.array([10, 255, 255])
+#COLOR_MIN = np.array([0, 100, 100])
+#COLOR_MAX = np.array([10, 255, 255])
 
 MIN_CORNER_AREA = 10
 
@@ -217,17 +217,17 @@ class NodoDeteccion(Node):
         return puntos_reales_ordenados, mejor_rect, mejor_error_proporcion, mejor_combinacion_real
 
     def algoritmoDetectarPuertas(self, img_hsv, img_visualizacion):
-        #rojo_min1 = np.array([0, 120, 150]) 
-        #rojo_max1 = np.array([10, 255, 255]) 
-        #rojo_min2 = np.array([170, 120, 150]) 
-        #rojo_max2 = np.array([179, 255, 255])
-        #mask1 = cv2.inRange(img_hsv, rojo_min1, rojo_max1)
-        #mask2 = cv2.inRange(img_hsv, rojo_min2, rojo_max2)
+        rojo_min1 = np.array([0, 120, 150]) 
+        rojo_max1 = np.array([10, 255, 255]) 
+        rojo_min2 = np.array([170, 120, 150]) 
+        rojo_max2 = np.array([179, 255, 255])
+        mask1 = cv2.inRange(img_hsv, rojo_min1, rojo_max1)
+        mask2 = cv2.inRange(img_hsv, rojo_min2, rojo_max2)
 
-        #mask = cv2.bitwise_or(mask1, mask2)
+        mask = cv2.bitwise_or(mask1, mask2)
     
         puntos_esquinas_detectados = []
-        mask = cv2.inRange(img_hsv, COLOR_MIN, COLOR_MAX)
+        #mask = cv2.inRange(img_hsv, COLOR_MIN, COLOR_MAX)
         kernel = np.ones((5,5), np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -251,8 +251,8 @@ class NodoDeteccion(Node):
         if len(puntos_esquinas) < 4:
             return puertas
         
-        puntos_reales_ordenados, mejor_rect, mejor_error_proporcion, _ = self.seleccionar_mejor_combinacion(puntos_esquinas)
-
+        #puntos_reales_ordenados, mejor_rect, mejor_error_proporcion, _ = self.seleccionar_mejor_combinacion(puntos_esquinas)
+        puntos_reales_ordenados = self.ordenar_puntos(puntos_esquinas)
         if puntos_reales_ordenados is not None:
             puntos_imagen_2d = np.array(puntos_reales_ordenados, dtype=np.float32)
             #print(f"Puerta encontrada (de {len(puntos_esquinas)} LEDs). Error prop.: {mejor_error_proporcion:.3f}")
@@ -270,26 +270,28 @@ class NodoDeteccion(Node):
             R_puerta_a_camara, _ = cv2.Rodrigues(rvec)
 
             R_camara_a_dron = np.array([
-                [0, 0, 1],  # Eje X dron = Z camara
-                [1, 0, 0],  # Eje Y dron = X camara
-                [0, 1, 0]   # Eje Z dron = Y camara
+                [ 0,  0,  1],  # Eje X dron (Adelante)  = Z camara (Adelante)
+                [-1,  0,  0],  # Eje Y dron (Izquierda) = -X camara (- Derecha)
+                [ 0, -1,  0]   # Eje Z dron (Arriba)    = -Y camara (- Abajo)
             ], dtype=np.float32)
             
             R_puerta_a_mundo = R_dron_a_mundo @ R_camara_a_dron @ R_puerta_a_camara
             
             vector_normal_mundo = R_puerta_a_mundo[:, 2]
             vector_normal_mundo = -vector_normal_mundo
-            #angulo_yaw = math.degrees(math.atan2(vector_normal_mundo[1], vector_normal_mundo[0]))
+            angulo_yaw = math.degrees(math.atan2(vector_normal_mundo[1], vector_normal_mundo[0]))
 
             largo_lado_izq = np.linalg.norm(esq1 - esq4)
             largo_lado_der = np.linalg.norm(esq2 - esq3)
             largo1 = max(largo_lado_izq, largo_lado_der)
             largo2 = min(largo_lado_izq, largo_lado_der)
-            angulo_yaw = 90 * (1 -(largo2/largo1))
+            #angulo_yaw = 90 * (1 -(largo2/largo1))
 
             #self.get_logger().info(f"==== : {nuevo_angulo:.2f}")
 
-            if (largo_lado_izq > largo_lado_der):
+            if (largo_lado_izq < largo_lado_der):
+                angulo_yaw = abs(angulo_yaw)
+            else:
                 angulo_yaw = -angulo_yaw
                 
             angulo_yaw = (angulo_yaw + 180) % 360 - 180
