@@ -11,7 +11,7 @@ DISTANCIA_SALIDA_M = 1.5
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_VELOCIDAD = 100.0
 AUMENTAR_YAW = 4.0
-VELOCIDAD_MAXIMA = 10
+VELOCIDAD_MAXIMA = 20
 VELOCIDAD_MAXIMA_YAW = 7.0
 DISTANCIA_NUEVA_PUERTA_M = 1.0
 ERROR_POSICION_M = 0.15
@@ -60,9 +60,12 @@ class NodoNavegacion(Node):
         self.pub_velocidad.publish(msg)
 
     def callback_pose_dron(self, msg: Float32MultiArray):
-        if len(msg.data) >= 6:
-            self.posicion_dron_mundo = np.array(msg.data[0:3])
-            self.yaw_dron_deg = msg.data[5]
+        data = list(msg.data)
+        if len(data) >= 6:
+            self.posicion_dron_mundo = np.array([data[0], -data[1], -data[2]])#webots
+            #self.posicion_dron_mundo = np.array([data[0], data[1], data[2]]) #tello
+            self.yaw_dron_deg = -float(data[5]) #webots
+            #self.yaw_dron_deg = float(data[5]) #tello
             self.pose_recibida = True
     
     def promediar_angulos_deg(self, angulo_actual, nuevo_angulo, n_actual, n_nuevo):
@@ -76,12 +79,16 @@ class NodoNavegacion(Node):
         return math.degrees(angulo_promedio_rad)
 
     def callback_nueva_puerta(self, msg: Float32MultiArray):
+        if not self.pose_recibida:
+            return
         if len(msg.data) < 4:
             return
-
-        punto_puerta_recibido = np.array(msg.data[0:3])
+        data = list(msg.data)
+        #punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#tello
+        punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#webots
         punto_puerta_recibido[2] -= MARGEN_ALTURA_M
-        angulo_recibido_deg = float(msg.data[3])
+        angulo_recibido_deg = float(msg.data[3])#tello
+        #angulo_recibido_deg = -float(msg.data[3])#webots
         
         if self.puerta_para_promediar is None:
             self.puerta_para_promediar = {
@@ -205,7 +212,7 @@ class NodoNavegacion(Node):
         return False
 
     def enviar_comando_velocidad(self, lr, fb, ud, yv):
-        msg = Float32MultiArray(data=[float(lr), float(fb), float(ud), float(yv)])
+        msg = Float32MultiArray(data=[float(-lr), float(fb), float(ud), float(yv)])
         #msg = Float32MultiArray(data=[0,0,0,0])
         self.pub_velocidad.publish(msg)
 

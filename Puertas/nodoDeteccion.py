@@ -23,7 +23,7 @@ TOLERANCIA_PROPORCION = 0.60
 #COLOR_MIN = np.array([0, 100, 100])
 #COLOR_MAX = np.array([10, 255, 255])
 
-MIN_CORNER_AREA = 10
+MIN_CORNER_AREA = 100
 
 #ALTO_REAL = 0.56
 #ANCHO_REAL = 0.375
@@ -85,16 +85,14 @@ class NodoDeteccion(Node):
         self.pub_punto_a.publish(msg)
 
     def callback_pose(self, msg: Float32MultiArray):
-        try:
-            data = list(msg.data)
-            if len(data) >= 6:
-                self.pos_dron_mundo = np.array([data[0], data[1], data[2]])
-                self.roll = float(data[3])
-                self.pitch = float(data[4])
-                self.yaw = float(data[5])
-        except Exception as e:
-            self.get_logger().error(f"Error procesando pose recibida: {e}")
-            self.get_logger().error(traceback.format_exc())
+        data = list(msg.data)
+        if len(data) >= 6:
+            #self.pos_dron_mundo = np.array([data[0], -data[1], -data[2]])#tello
+            self.pos_dron_mundo = np.array([data[0], data[1], data[2]]) #webots
+            self.roll = float(data[3])
+            self.pitch = float(data[4])
+            #self.yaw = -float(data[5]) #tello
+            self.yaw = float(data[5]) #webots
 
     def callback_procesamiento_imagen(self, msg_imagen_ros):
         try:
@@ -297,7 +295,7 @@ class NodoDeteccion(Node):
             angulo_yaw = (angulo_yaw + 180) % 360 - 180
                 
             tvec_camara = tvec.reshape(3)
-            punto_cuerpo_pnp = np.array([tvec_camara[2], tvec_camara[0], tvec_camara[1]])
+            punto_cuerpo_pnp = np.array([tvec_camara[2], -tvec_camara[0], -tvec_camara[1]])
 
             punto_mundo, _ = self.transformar_punto_cuerpo_a_mundo(punto_cuerpo_pnp)
             #self.get_logger().info(f"Relativo: {angulo_yaw:.2f} | Yaw Dron: {self.yaw:.2f} | AZIMUT: {angulo_azimut_grados:.2f}")
