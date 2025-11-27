@@ -11,7 +11,7 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Imu  
 from geometry_msgs.msg import PointStamped
 
-FACTOR_ESCALA_VELOCIDAD = 0.05
+FACTOR_ESCALA_VELOCIDAD = 0.01
 FACTOR_ESCALA_YAW = 0.5
 
 class TelloMavicPuente(Node):
@@ -51,25 +51,17 @@ class TelloMavicPuente(Node):
 
     def callback_velocidad(self, msg_in):
         lr_in, fb_in, ud_in, yv_in = msg_in.data
-                
-        vx_mundo = fb_in * FACTOR_ESCALA_VELOCIDAD
-        vy_mundo = lr_in * FACTOR_ESCALA_VELOCIDAD
-        vz_mundo = ud_in * FACTOR_ESCALA_VELOCIDAD 
-
-        wz_cuerpo = yv_in * FACTOR_ESCALA_YAW
-
-        yaw_actual = self.orientacion_actual[2]
-        c = math.cos(yaw_actual)
-        s = math.sin(yaw_actual)
-
-        vx_cuerpo = vx_mundo * c + vy_mundo * s
-        vy_cuerpo = -vx_mundo * s + vy_mundo * c
+        
+        vx = fb_in * FACTOR_ESCALA_VELOCIDAD
+        vy = lr_in * FACTOR_ESCALA_VELOCIDAD
+        vz = ud_in * FACTOR_ESCALA_VELOCIDAD 
+        wz = yv_in * FACTOR_ESCALA_YAW
 
         msg_out = Twist()
-        msg_out.linear.x = float(vx_cuerpo)
-        msg_out.linear.y = float(vy_cuerpo)
-        msg_out.linear.z = float(vz_mundo) 
-        msg_out.angular.z = float(wz_cuerpo)
+        msg_out.linear.x = float(vx)
+        msg_out.linear.y = float(vy)
+        msg_out.linear.z = float(vz) 
+        msg_out.angular.z = float(wz)
         
         self.pub_vel_mavic.publish(msg_out)
 
