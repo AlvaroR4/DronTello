@@ -20,10 +20,11 @@ WorldInfo {
   }
 }
 Viewpoint {
-  orientation -0.2226216675679071 -0.20221610105569315 0.9537023862836446 5.806825724614801
-  position -8.176191282389553 7.573718298331803 2.5443717563648987
+  orientation -0.10397749630385447 -0.9734280921271486 -0.20402556143797565 5.748977969324934
+  position -7.995176473996482 -1.459052737634579 6.338093076486245
   near 0.2
-  follow "Mavic 2 PRO"
+  follow "floor"
+  followType "None"
   followSmoothness 0.2
 }
 TexturedBackground {
@@ -59,7 +60,8 @@ Mavic2Pro {
   ]
 }
 Solid {
-  translation 3.5 1.5 2
+  translation 4.5 1 2.7
+  rotation 0 0 1 0.7853996938995746
   children [
     DEF Puerta Puerta {
       rotation 0 1 0 -1.5708003061004252

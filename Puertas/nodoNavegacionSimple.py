@@ -6,7 +6,7 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-DISTANCIA_APROXIMACION_M = 0.40
+DISTANCIA_APROXIMACION_M = 1.0
 DISTANCIA_SALIDA_M = 1.5
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_VELOCIDAD = 15.0
@@ -14,7 +14,7 @@ AUMENTAR_YAW = 4.0
 VELOCIDAD_MAXIMA = 30
 VELOCIDAD_MAXIMA_YAW = 7.0
 DISTANCIA_NUEVA_PUERTA_M = 1.0
-ERROR_POSICION_M = 0.15
+ERROR_POSICION_M = 0.25
 ERROR_YAW_DEG = 5.0
 
 def rango_velocidad(valor, maximo):
