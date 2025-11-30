@@ -6,16 +6,16 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-DISTANCIA_APROXIMACION_M = 1.0
+DISTANCIA_APROXIMACION_M = 1.5
 DISTANCIA_SALIDA_M = 1.5
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_VELOCIDAD = 15.0
-AUMENTAR_YAW = 4.0
+AUMENTAR_YAW = 8.0
 VELOCIDAD_MAXIMA = 30
-VELOCIDAD_MAXIMA_YAW = 7.0
+VELOCIDAD_MAXIMA_YAW = 15.0
 DISTANCIA_NUEVA_PUERTA_M = 1.0
-ERROR_POSICION_M = 0.25
-ERROR_YAW_DEG = 5.0
+ERROR_POSICION_M = 0.08
+ERROR_YAW_DEG = 2.0
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -110,7 +110,7 @@ class NodoNavegacion(Node):
                 self.puerta_para_promediar['punto'] = nuevo_punto
                 self.puerta_para_promediar['angulo'] = nuevo_angulo
                 self.puerta_para_promediar['n_muestras'] += 1
-                self.get_logger().info(f"Puerta modificada, muestra {n+1}")
+                #self.get_logger().info(f"Puerta modificada, muestra {n+1}")
         
         punto_central_puerta = self.puerta_para_promediar['punto']
         self.angulo_objetivo_deg = self.puerta_para_promediar['angulo']
@@ -137,12 +137,12 @@ class NodoNavegacion(Node):
         if self.estado_mision == 'IR_A_PUNTO_APROXIMACION':
             objetivo = self.puntos_trayectoria_actual[0]
             if self.ir_a_posicion(objetivo):
-                self.get_logger().info("Punto de aproximación alcanzado -> Punto salida")
-                self.estado_mision = 'IR_A_PUNTO_SALIDA'
+                self.get_logger().info(f"Punto de aproximación alcanzado -> Rotando {self.angulo_objetivo_deg} grados")
+                self.estado_mision = 'ROTAR_HACIA_PUERTA'
 
         elif self.estado_mision == 'ROTAR_HACIA_PUERTA':
-            if self.rotar_a_yaw(self.angulo_objetivo_deg):
-                self.get_logger().info("Rotación completada -> Cruzando puerta")
+            if self.rotar_a_yaw( ):
+                self.get_logger().info(f"Rotación completada -> Cruzando puerta: {self.puntos_trayectoria_actual[2]}")
                 self.estado_mision = 'IR_A_PUNTO_SALIDA'
 
         if self.estado_mision == 'IR_A_PUNTO_SALIDA':
@@ -196,19 +196,31 @@ class NodoNavegacion(Node):
                         rotacion = -VELOCIDAD_MAXIMA_YAW
                     else: 
                         rotacion = VELOCIDAD_MAXIMA_YAW
+        
+        yaw_rad = math.radians(self.yaw_dron_deg)
+        
+        # Fórmula de rotación de vectores 2D:
+        # V_fb = V_x_mundo * cos(yaw) + V_y_mundo * sin(yaw)
+        # V_lr = -V_x_mundo * sin(yaw) + V_y_mundo * cos(yaw)
+        
+        avance_cuerpo = avance * math.cos(yaw_rad) + lateral * math.sin(yaw_rad)
+        lateral_cuerpo = -avance * math.sin(yaw_rad) + lateral * math.cos(yaw_rad)
+        
+        self.enviar_comando_velocidad(lateral_cuerpo, avance_cuerpo, vertical, rotacion)
         #self.detener_dron()                
-        self.enviar_comando_velocidad(lateral, avance, vertical, rotacion)
         return distancia_al_objetivo < ERROR_POSICION_M
 
-    def rotar_a_yaw(self, angulo_objetivo_deg):
-        error_yaw = normalizar_angulo_deg(angulo_objetivo_deg - self.yaw_dron_deg)
+    def rotar_a_yaw(self):
+        error_yaw = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
         
         if abs(error_yaw) < ERROR_YAW_DEG:
             self.detener_dron()
             return True
         
+        
         rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA_YAW)
-        self.enviar_comando_velocidad(0, 0, 0, rotacion)
+        #self.enviar_comando_velocidad(0, 0, 0, rotacion) #tello
+        self.enviar_comando_velocidad(0, 0, 0, -rotacion) #webots
         return False
 
     def enviar_comando_velocidad(self, lr, fb, ud, yv):

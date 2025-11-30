@@ -11,7 +11,7 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Imu  
 from geometry_msgs.msg import PointStamped
 
-FACTOR_ESCALA_VELOCIDAD = 0.01
+FACTOR_ESCALA = 0.01
 FACTOR_ESCALA_YAW = 0.5
 
 class TelloMavicPuente(Node):
@@ -52,10 +52,10 @@ class TelloMavicPuente(Node):
     def callback_velocidad(self, msg_in):
         lr_in, fb_in, ud_in, yv_in = msg_in.data
         
-        vx = fb_in * FACTOR_ESCALA_VELOCIDAD
-        vy = lr_in * FACTOR_ESCALA_VELOCIDAD
-        vz = ud_in * FACTOR_ESCALA_VELOCIDAD 
-        wz = yv_in * FACTOR_ESCALA_YAW
+        vx = fb_in * FACTOR_ESCALA
+        vy = lr_in * FACTOR_ESCALA
+        vz = ud_in * FACTOR_ESCALA 
+        wz = yv_in * FACTOR_ESCALA
 
         msg_out = Twist()
         msg_out.linear.x = float(vx)
