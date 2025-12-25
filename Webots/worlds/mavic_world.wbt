@@ -7,6 +7,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projec
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projects/objects/factory/manhole/protos/SquareManhole.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projects/robots/dji/mavic/protos/Mavic2Pro.proto"
 EXTERNPROTO "../protos/Puerta.proto"
+EXTERNPROTO "../protos/PuertaAzul.proto"
 
 WorldInfo {
   info [
@@ -20,8 +21,8 @@ WorldInfo {
   }
 }
 Viewpoint {
-  orientation -0.10397749630385447 -0.9734280921271486 -0.20402556143797565 5.748977969324934
-  position -7.995176473996482 -1.459052737634579 6.338093076486245
+  orientation -0.2170124622312002 -0.9459937518400012 0.24083482455000116 5.323209713707644
+  position -13.934262374857845 3.0614589116799302 23.085814710410528
   near 0.2
   follow "floor"
   followType "None"
@@ -67,5 +68,15 @@ Solid {
       rotation 0 1 0 -1.5708003061004252
     }
   ]
-  name "Puerta"
+  name "PuertaRoja"
+}
+Solid {
+  translation 9 -1 2.7
+  rotation 0 0 1 -0.3926996938995747
+  children [
+    DEF PuertaAzul PuertaAzul {
+      rotation 0 1 0 -1.5707996938995747
+    }
+  ]
+  name "PuertaAzul"
 }
