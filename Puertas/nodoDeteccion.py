@@ -23,7 +23,7 @@ TOLERANCIA_PROPORCION = 0.60
 #COLOR_MIN = np.array([0, 100, 100])
 #COLOR_MAX = np.array([10, 255, 255])
 
-MIN_CORNER_AREA = 100
+MIN_CORNER_AREA = 10
 
 #ALTO_REAL = 0.56
 #ANCHO_REAL = 0.375
@@ -215,34 +215,58 @@ class NodoDeteccion(Node):
         return puntos_reales_ordenados, mejor_rect, mejor_error_proporcion, mejor_combinacion_real
 
     def algoritmoDetectarPuertas(self, img_hsv, img_visualizacion):
-        rojo_min1 = np.array([0, 120, 150]) 
-        rojo_max1 = np.array([10, 255, 255]) 
-        rojo_min2 = np.array([170, 120, 150]) 
-        rojo_max2 = np.array([179, 255, 255])
-        mask1 = cv2.inRange(img_hsv, rojo_min1, rojo_max1)
-        mask2 = cv2.inRange(img_hsv, rojo_min2, rojo_max2)
-
-        mask = cv2.bitwise_or(mask1, mask2)
-    
-        puntos_esquinas_detectados = []
-        #mask = cv2.inRange(img_hsv, COLOR_MIN, COLOR_MAX)
+        todas_puertas_encontradas = []
         kernel = np.ones((5,5), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-        contornos, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        for cnt in contornos:
-            area = cv2.contourArea(cnt)
-            if area > MIN_CORNER_AREA:
-                M = cv2.moments(cnt)
-                if M['m00'] > 0:
-                    cx = int(M["m10"] / M["m00"])
-                    cy = int(M["m01"] / M["m00"])
-                    puntos_esquinas_detectados.append((cx, cy))
-                    cv2.circle(img_visualizacion, (cx, cy), 7, (255, 0, 0), -1)
+        config_colores = [
+            {
+                "nombre": "rojo",
+                "color": (0, 0, 255),
+                "rangos": [
+                    (np.array([0, 120, 150]), np.array([10, 255, 255])),
+                    (np.array([170, 120, 150]), np.array([179, 255, 255]))
+                ]
+            },
+            {
+                "nombre": "azul",
+                "color": (255, 0, 0),
+                "rangos": [
+                    (np.array([100, 190, 0]), np.array([140, 255, 255])) 
+                ]
+            }
+        ]
 
-        puertas_encontradas = self.tratarPuerta(puntos_esquinas_detectados, img_visualizacion)
-        return puertas_encontradas, img_visualizacion
+        for config in config_colores:
+            mask_color = None
+            
+            for (bajo, alto) in config["rangos"]:
+                mask_parcial = cv2.inRange(img_hsv, bajo, alto)
+                if mask_color is None:
+                    mask_color = mask_parcial
+                else:
+                    mask_color = cv2.bitwise_or(mask_color, mask_parcial)
+
+            mask_color = cv2.morphologyEx(mask_color, cv2.MORPH_OPEN, kernel)
+            mask_color = cv2.morphologyEx(mask_color, cv2.MORPH_CLOSE, kernel)
+
+            contornos, _ = cv2.findContours(mask_color, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            puntos_esquinas_detectados = []
+
+            for cnt in contornos:
+                area = cv2.contourArea(cnt)
+                if area > MIN_CORNER_AREA:
+                    M = cv2.moments(cnt)
+                    if M['m00'] > 0:
+                        cx = int(M["m10"] / M["m00"])
+                        cy = int(M["m01"] / M["m00"])
+                        puntos_esquinas_detectados.append((cx, cy))
+                        cv2.circle(img_visualizacion, (cx, cy), 7, config["color"], -1)
+
+            puertas_este_color = self.tratarPuerta(puntos_esquinas_detectados, img_visualizacion)
+            todas_puertas_encontradas.extend(puertas_este_color)
+
+        return todas_puertas_encontradas, img_visualizacion
 
     def tratarPuerta(self, puntos_esquinas, img_visualizacion):
         puertas = []
@@ -298,7 +322,6 @@ class NodoDeteccion(Node):
             punto_cuerpo_pnp = np.array([tvec_camara[2], -tvec_camara[0], -tvec_camara[1]])
 
             punto_mundo, _ = self.transformar_punto_cuerpo_a_mundo(punto_cuerpo_pnp)
-            #self.get_logger().info(f"Relativo: {angulo_yaw:.2f} | Yaw Dron: {self.yaw:.2f} | AZIMUT: {angulo_azimut_grados:.2f}")
             self.distancia_estimada = None
             self.distancia_calculada = np.linalg.norm(punto_cuerpo_pnp)
             self.coordenada_X, self.coordenada_Y, self.coordenada_Z = punto_cuerpo_pnp
@@ -318,8 +341,8 @@ class NodoDeteccion(Node):
             y_centro_puerta = int(np.mean([p[1] for p in puntos_imagen_2d]))
             esquinas = [esq1, esq2, esq3, esq4]
             cv2.polylines(img_visualizacion, [np.array(esquinas, np.int32)], True, (0, 255, 0), 2)
-            cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 5, (0, 0, 255), -1)
-            cv2.putText(img_visualizacion, f"Puerta ({x_centro_puerta},{y_centro_puerta},{angulo_yaw:.1f})",
+            cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 5, (0, 255, 0), -1)
+            cv2.putText(img_visualizacion, f"Puerta ({punto_mundo[0]:.1f},{punto_mundo[1]:.1f},{angulo_yaw:.1f})",
                             (x_centro_puerta - 50, y_centro_puerta - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2, cv2.LINE_AA)
 

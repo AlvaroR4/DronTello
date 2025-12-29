@@ -87,8 +87,8 @@ class NodoNavegacion(Node):
         #punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#tello
         punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#webots
         punto_puerta_recibido[2] -= MARGEN_ALTURA_M
-        angulo_recibido_deg = float(msg.data[3])#tello
-        #angulo_recibido_deg = -float(msg.data[3])#webots
+        angulo_recibido_deg = float(msg.data[3])#webots
+        #angulo_recibido_deg = -float(msg.data[3])#tello
         
         if self.puerta_para_promediar is None:
             self.puerta_para_promediar = {
