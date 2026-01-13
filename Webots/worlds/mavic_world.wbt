@@ -1,4 +1,4 @@
-#VRML_SIM R2025a utf8
+#VRML_SIM R2025b utf8
 
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
@@ -8,6 +8,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projec
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projects/robots/dji/mavic/protos/Mavic2Pro.proto"
 EXTERNPROTO "../protos/Puerta.proto"
 EXTERNPROTO "../protos/PuertaAzul.proto"
+EXTERNPROTO "../protos/ArucoMarker.proto"
 
 WorldInfo {
   info [
@@ -21,8 +22,8 @@ WorldInfo {
   }
 }
 Viewpoint {
-  orientation -0.2170124622312002 -0.9459937518400012 0.24083482455000116 5.323209713707644
-  position -13.934262374857845 3.0614589116799302 23.085814710410528
+  orientation -0.08165621385507951 -0.9803101371267327 -0.17978959309542963 5.661036181647237
+  position -7.087402980100353 -0.06720303170117692 6.504391958621458
   near 0.2
   follow "floor"
   followType "None"
@@ -79,4 +80,161 @@ Solid {
     }
   ]
   name "PuertaAzul"
+}
+DEF Puerta Solid {
+  translation -2 0 2.7
+  rotation 0 1 0 -1.5707996938995747
+  children [
+    ArucoMarker {
+      translation 0.35 0.5 0.01
+      size 0.3
+    }
+    Pose {
+    }
+    DEF Led Pose {
+      translation 0.1 0 0.04
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 1 0 0
+            emissiveColor 1 0 0
+          }
+          geometry Cylinder {
+            height 0.05
+            radius 0.05
+          }
+        }
+      ]
+    }
+    DEF Led Pose {
+      translation -1.3 0 0.04
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 1 0 0
+            emissiveColor 1 0 0
+          }
+          geometry Cylinder {
+            height 0.05
+            radius 0.05
+          }
+        }
+      ]
+    }
+    DEF Led Pose {
+      translation -1.3 1 0.04
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 1 0 0
+            emissiveColor 1 0 0
+          }
+          geometry Cylinder {
+            height 0.05
+            radius 0.05
+          }
+        }
+      ]
+    }
+    DEF Led Pose {
+      translation 0.1 1 0.04
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 1 0 0
+            emissiveColor 1 0 0
+          }
+          geometry Cylinder {
+            height 0.05
+            radius 0.05
+          }
+        }
+      ]
+    }
+    DEF AltoI Pose {
+      translation -0.6 1 0
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.7 0
+          }
+          geometry Box {
+            size 1.5 0.1 0.1
+          }
+        }
+      ]
+    }
+    DEF AltoD Pose {
+      translation -0.6 0 0
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.7 0
+          }
+          geometry Box {
+            size 1.5 0.1 0.1
+          }
+        }
+      ]
+    }
+    DEF AnchoAr Pose {
+      translation 0.1 0.5 0
+      rotation 0 0 1 1.5707996938995747
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.7 0
+          }
+          geometry Box {
+            size 1 0.1 0.1
+          }
+        }
+      ]
+    }
+    DEF AnchoAb Pose {
+      translation -1.3 0.5 0
+      rotation 0 0 1 1.5707996938995747
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.7 0
+          }
+          geometry Box {
+            size 1 0.1 0.1
+          }
+        }
+      ]
+    }
+    DEF Palo Pose {
+      translation -2 0.5 0
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.7 0
+          }
+          geometry Box {
+            size 1.5 0.1 0.1
+          }
+        }
+      ]
+    }
+    DEF Base Pose {
+      translation -2.7 0.5 0
+      rotation 0 1 0 1.5707996938995747
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.7 0
+          }
+          geometry Box {
+            size 1 1 0.1
+          }
+        }
+      ]
+    }
+  ]
+  name "Puerta"
+  boundingObject USE AnchoAb
+  physics Physics {
+  }
 }
