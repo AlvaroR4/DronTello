@@ -13,7 +13,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
 READ_CHUNK = 4096
-TOPIC = 'camera/image_raw'
+TOPIC = 'tello/imagen'
 FPS = 25
 
 class MinimalTelloPublisher(Node):

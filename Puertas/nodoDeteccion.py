@@ -99,7 +99,7 @@ class NodoDeteccion(Node):
             frame_bgr_raw = self.bridge.imgmsg_to_cv2(msg_imagen_ros, desired_encoding="bgr8")
             img_procesamiento = cv2.resize(frame_bgr_raw, (ANCHO_IMAGEN, ALTO_IMAGEN))
             img_hsv = cv2.cvtColor(img_procesamiento, cv2.COLOR_BGR2HSV)
-            puertas_detectadas, img_con_dibujos = self.algoritmoDetectarPuertas(img_hsv, img_procesamiento.copy())
+            puertas_detectadas, img_con_dibujos = self.algoritmoDetectarPuertasAruco(img_hsv, img_procesamiento.copy())
 
             ros_image_msg_out = self.bridge.cv2_to_imgmsg(img_con_dibujos, encoding="bgr8")
             self.publicador_imagen_visualizacion.publish(ros_image_msg_out)
@@ -265,6 +265,42 @@ class NodoDeteccion(Node):
 
             puertas_este_color = self.tratarPuerta(puntos_esquinas_detectados, img_visualizacion)
             todas_puertas_encontradas.extend(puertas_este_color)
+
+        return todas_puertas_encontradas, img_visualizacion
+    def algoritmoDetectarPuertasAruco(self, img_hsv, img_visualizacion):
+        todas_puertas_encontradas = []
+        
+        img_gray = cv2.cvtColor(img_visualizacion, cv2.COLOR_BGR2GRAY)
+        
+        try:
+            aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_250)
+            aruco_params = cv2.aruco.DetectorParameters()
+        except AttributeError:
+            aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_250)
+            aruco_params = cv2.aruco.DetectorParameters_create()
+
+        corners, ids, rejected = cv2.aruco.detectMarkers(img_gray, aruco_dict, parameters=aruco_params)
+        
+        puntos_esquinas_detectados = []
+
+        if ids is not None:
+            ids = ids.flatten()
+            
+            for (marker_corners, marker_id) in zip(corners, ids):
+                if marker_id == 7:
+                    pts = marker_corners.reshape((4, 2))
+                    
+                    cx = int(np.mean(pts[:, 0]))
+                    cy = int(np.mean(pts[:, 1]))
+                    
+                    puntos_esquinas_detectados.append((cx, cy))
+                    
+                    cv2.polylines(img_visualizacion, [pts.astype(int)], True, (0, 255, 0), 2)
+                    cv2.circle(img_visualizacion, (cx, cy), 5, (0, 0, 255), -1)
+                    # cv2.putText(img_visualizacion, f"ID:{marker_id}", (cx, cy-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
+
+        puertas_encontradas = self.tratarPuerta(puntos_esquinas_detectados, img_visualizacion)
+        todas_puertas_encontradas.extend(puertas_encontradas)
 
         return todas_puertas_encontradas, img_visualizacion
 

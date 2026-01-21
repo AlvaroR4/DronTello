@@ -22,8 +22,8 @@ WorldInfo {
   }
 }
 Viewpoint {
-  orientation -0.08165621385507951 -0.9803101371267327 -0.17978959309542963 5.661036181647237
-  position -7.087402980100353 -0.06720303170117692 6.504391958621458
+  orientation -0.028732105686392236 -0.8264443815392575 -0.5622847591078922 5.744257865198417
+  position -16.676271614932705 -6.301266254956265 11.483807855172572
   near 0.2
   follow "floor"
   followType "None"
@@ -62,7 +62,7 @@ Mavic2Pro {
   ]
 }
 Solid {
-  translation 4.5 1 2.7
+  translation -3.2 1 2.7
   rotation 0 0 1 0.7853996938995746
   children [
     DEF Puerta Puerta {
@@ -72,7 +72,7 @@ Solid {
   name "PuertaRoja"
 }
 Solid {
-  translation 9 -1 2.7
+  translation -4 -1 2.7
   rotation 0 0 1 -0.3926996938995747
   children [
     DEF PuertaAzul PuertaAzul {
@@ -81,160 +81,120 @@ Solid {
   ]
   name "PuertaAzul"
 }
-DEF Puerta Solid {
-  translation -2 0 2.7
-  rotation 0 1 0 -1.5707996938995747
+DEF PuertaA Solid {
+  translation 6 1 2.7
+  rotation 0 0 1 0.5236003061004253
   children [
-    ArucoMarker {
-      translation 0.35 0.5 0.01
-      size 0.3
-    }
-    Pose {
-    }
-    DEF Led Pose {
-      translation 0.1 0 0.04
+    DEF PuertaAruco Solid {
+      rotation 0 1 0 -1.5707996938995747
       children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 1 0 0
-            emissiveColor 1 0 0
-          }
-          geometry Cylinder {
-            height 0.05
-            radius 0.05
-          }
+        ArucoMarker {
+          translation -1.3 0 0.055
+          name "aruco(3)"
+          markerId "7"
+        }
+        ArucoMarker {
+          translation -1.3 1 0.055
+          name "aruco(2)"
+          markerId "7"
+        }
+        ArucoMarker {
+          translation 0.1 0 0.055
+          name "aruco(1)"
+          markerId "7"
+        }
+        ArucoMarker {
+          translation 0.1 1 0.055
+          markerId "7"
+        }
+        Pose {
+        }
+        DEF AltoI Pose {
+          translation -0.6 1 0
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.5 0.7 0
+              }
+              geometry Box {
+                size 1.5 0.1 0.1
+              }
+            }
+          ]
+        }
+        DEF AltoD Pose {
+          translation -0.6 0 0
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.5 0.7 0
+              }
+              geometry Box {
+                size 1.5 0.1 0.1
+              }
+            }
+          ]
+        }
+        DEF AnchoAr Pose {
+          translation 0.1 0.5 0
+          rotation 0 0 1 1.5707996938995747
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.5 0.7 0
+              }
+              geometry Box {
+                size 1 0.1 0.1
+              }
+            }
+          ]
+        }
+        DEF AnchoAb Pose {
+          translation -1.3 0.5 0
+          rotation 0 0 1 1.5707996938995747
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.5 0.7 0
+              }
+              geometry Box {
+                size 1 0.1 0.1
+              }
+            }
+          ]
+        }
+        DEF Palo Pose {
+          translation -2 0.5 0
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.5 0.7 0
+              }
+              geometry Box {
+                size 1.5 0.1 0.1
+              }
+            }
+          ]
+        }
+        DEF Base Pose {
+          translation -2.7 0.5 0
+          rotation 0 1 0 1.5707996938995747
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.5 0.7 0
+              }
+              geometry Box {
+                size 1 1 0.1
+              }
+            }
+          ]
         }
       ]
-    }
-    DEF Led Pose {
-      translation -1.3 0 0.04
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 1 0 0
-            emissiveColor 1 0 0
-          }
-          geometry Cylinder {
-            height 0.05
-            radius 0.05
-          }
-        }
-      ]
-    }
-    DEF Led Pose {
-      translation -1.3 1 0.04
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 1 0 0
-            emissiveColor 1 0 0
-          }
-          geometry Cylinder {
-            height 0.05
-            radius 0.05
-          }
-        }
-      ]
-    }
-    DEF Led Pose {
-      translation 0.1 1 0.04
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 1 0 0
-            emissiveColor 1 0 0
-          }
-          geometry Cylinder {
-            height 0.05
-            radius 0.05
-          }
-        }
-      ]
-    }
-    DEF AltoI Pose {
-      translation -0.6 1 0
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1.5 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF AltoD Pose {
-      translation -0.6 0 0
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1.5 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF AnchoAr Pose {
-      translation 0.1 0.5 0
-      rotation 0 0 1 1.5707996938995747
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF AnchoAb Pose {
-      translation -1.3 0.5 0
-      rotation 0 0 1 1.5707996938995747
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF Palo Pose {
-      translation -2 0.5 0
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1.5 0.1 0.1
-          }
-        }
-      ]
-    }
-    DEF Base Pose {
-      translation -2.7 0.5 0
-      rotation 0 1 0 1.5707996938995747
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.7 0
-          }
-          geometry Box {
-            size 1 1 0.1
-          }
-        }
-      ]
+      name "PuertaAruco"
+      boundingObject USE AnchoAb
+      physics Physics {
+      }
     }
   ]
-  name "Puerta"
-  boundingObject USE AnchoAb
-  physics Physics {
-  }
 }

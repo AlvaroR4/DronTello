@@ -14,8 +14,8 @@ INPUT_IMAGE_TOPIC = 'tello/imagen'
 OUTPUT_IMAGE_TOPIC = '/tello/imagen_aruco'
 OUTPUT_DISTANCE_TOPIC = '/tello/aruco_distance' 
 OUTPUT_POSE_TOPIC = '/tello/aruco_pose'  #[id, x,y,z, roll_deg, pitch_deg, yaw_deg]
-ARUCO_DICT = cv2.aruco.DICT_5X5_250
-MARKER_SIZE = 0.175  # m
+ARUCO_DICT = cv2.aruco.DICT_4X4_250
+MARKER_SIZE = 0.1  # m
 PROC_WIDTH = 960
 PROC_HEIGHT = 710
 
