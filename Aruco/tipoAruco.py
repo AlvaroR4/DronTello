@@ -1,6 +1,6 @@
 import cv2
 
-img = cv2.imread("aruco.jpg", cv2.IMREAD_GRAYSCALE)
+img = cv2.imread("aruco2.png", cv2.IMREAD_GRAYSCALE)
 
 candidates = [
     cv2.aruco.DICT_4X4_50, cv2.aruco.DICT_4X4_100, cv2.aruco.DICT_4X4_250,

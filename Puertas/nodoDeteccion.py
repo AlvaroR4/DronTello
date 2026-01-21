@@ -27,7 +27,7 @@ MIN_CORNER_AREA = 10
 
 #ALTO_REAL = 0.56
 #ANCHO_REAL = 0.375
-ALTO_REAL = 1.5
+ALTO_REAL = 1.3
 ANCHO_REAL = 1.0
 FOCAL = 617.0
 
@@ -272,12 +272,8 @@ class NodoDeteccion(Node):
         
         img_gray = cv2.cvtColor(img_visualizacion, cv2.COLOR_BGR2GRAY)
         
-        try:
-            aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_250)
-            aruco_params = cv2.aruco.DetectorParameters()
-        except AttributeError:
-            aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_250)
-            aruco_params = cv2.aruco.DetectorParameters_create()
+        aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
+        aruco_params = cv2.aruco.DetectorParameters()
 
         corners, ids, rejected = cv2.aruco.detectMarkers(img_gray, aruco_dict, parameters=aruco_params)
         
