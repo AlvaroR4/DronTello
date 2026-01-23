@@ -6,8 +6,8 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-DISTANCIA_APROXIMACION_M = 1.5
-DISTANCIA_SALIDA_M = 1.5
+DISTANCIA_APROXIMACION_M = 0.8
+DISTANCIA_SALIDA_M = 0.5
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_VELOCIDAD = 15.0
 AUMENTAR_YAW = 8.0
@@ -62,10 +62,10 @@ class NodoNavegacion(Node):
     def callback_pose_dron(self, msg: Float32MultiArray):
         data = list(msg.data)
         if len(data) >= 6:
-            self.posicion_dron_mundo = np.array([data[0], -data[1], -data[2]])#webots
-            #self.posicion_dron_mundo = np.array([data[0], data[1], data[2]]) #tello
-            self.yaw_dron_deg = -float(data[5]) #webots
-            #self.yaw_dron_deg = float(data[5]) #tello
+            #self.posicion_dron_mundo = np.array([data[0], -data[1], -data[2]])#webots
+            self.posicion_dron_mundo = np.array([data[0], data[1], data[2]]) #tello
+            #self.yaw_dron_deg = -float(data[5]) #webots
+            self.yaw_dron_deg = float(data[5]) #tello
             self.pose_recibida = True
     
     def promediar_angulos_deg(self, angulo_actual, nuevo_angulo, n_actual, n_nuevo):
@@ -84,11 +84,11 @@ class NodoNavegacion(Node):
         if len(msg.data) < 4:
             return
         data = list(msg.data)
-        #punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#tello
-        punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#webots
+        punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#tello
+        #punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#webots
         punto_puerta_recibido[2] -= MARGEN_ALTURA_M
-        angulo_recibido_deg = float(msg.data[3])#webots
-        #angulo_recibido_deg = -float(msg.data[3])#tello
+        #angulo_recibido_deg = float(msg.data[3])#webots
+        angulo_recibido_deg = -float(msg.data[3])#tello
         
         if self.puerta_para_promediar is None:
             self.puerta_para_promediar = {
@@ -219,8 +219,8 @@ class NodoNavegacion(Node):
         
         
         rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA_YAW)
-        #self.enviar_comando_velocidad(0, 0, 0, rotacion) #tello
-        self.enviar_comando_velocidad(0, 0, 0, -rotacion) #webots
+        self.enviar_comando_velocidad(0, 0, 0, rotacion) #tello
+        #self.enviar_comando_velocidad(0, 0, 0, -rotacion) #webots
         return False
 
     def enviar_comando_velocidad(self, lr, fb, ud, yv):

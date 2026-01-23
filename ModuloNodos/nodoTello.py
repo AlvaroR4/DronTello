@@ -11,7 +11,7 @@ import threading
 from pynput import keyboard 
 
 TELLO_IP = '192.168.10.1'
-ROS_TOPIC_IMAGEN_RAW = 'camera/image_raw'
+ROS_TOPIC_IMAGEN_RAW = 'tello/imagen'
 ROS_TOPIC_COMANDOS_VELOCIDAD = '/tello/comandos_velocidad'
 TIMER_PERIODO_CAMARA = 1.0 / 30.0    # ~30 FPS para la cámara
 

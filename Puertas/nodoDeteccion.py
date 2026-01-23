@@ -27,9 +27,9 @@ MIN_CORNER_AREA = 10
 
 #ALTO_REAL = 0.56
 #ANCHO_REAL = 0.375
-ALTO_REAL = 1.3
-ANCHO_REAL = 1.0
-FOCAL = 617.0
+ALTO_REAL = 1.0
+ANCHO_REAL = 0.51
+FOCAL = 827.0
 
 class NodoDeteccion(Node):
     def __init__(self):
@@ -38,10 +38,13 @@ class NodoDeteccion(Node):
         self.bridge = CvBridge()
         
         self.camera_matrix = np.array([
-            [FOCAL, 0, ANCHO_IMAGEN / 2],
-            [0, FOCAL, ALTO_IMAGEN / 2],
+            [FOCAL, 0, 0],
+            [0, FOCAL, 0],
             [0, 0, 1]
         ], dtype=np.float32)
+        self.ancho_imagen = 0
+        self.alto_imagen = 0
+
         self.dist_coeffs = np.zeros((1, 5))
         ancho_mitad = ANCHO_REAL / 2.0
         alto_mitad = ALTO_REAL / 2.0
@@ -63,7 +66,7 @@ class NodoDeteccion(Node):
         self.pub_punto_a = self.create_publisher(Float32MultiArray, '/tello/punto_y_angulo', 10)
 
         qos_profile_sub = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST, depth=1)
-        self.suscripcion_imagen = self.create_subscription(Image, ROS_TOPIC_IMAGEN_RAW_INPUT, self.callback_procesamiento_imagen, qos_profile_sub)
+        self.suscripcion_imagen = self.create_subscription(Image, ROS_TOPIC_IMAGEN_RAW_INPUT, self.callback_procesamiento_imagen2, qos_profile_sub)
 
         qos_profile_pose = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST, depth=10)
         self.suscripcion_pose = self.create_subscription(Float32MultiArray, ROS_TOPIC_POSE_ANGLES, self.callback_pose, qos_profile_pose)
@@ -97,7 +100,7 @@ class NodoDeteccion(Node):
     def callback_procesamiento_imagen(self, msg_imagen_ros):
         try:
             frame_bgr_raw = self.bridge.imgmsg_to_cv2(msg_imagen_ros, desired_encoding="bgr8")
-            img_procesamiento = cv2.resize(frame_bgr_raw, (ANCHO_IMAGEN, ALTO_IMAGEN))
+            img_procesamiento = cv2.resize(frame_bgr_raw, (self.ancho_imagen, self.alto_imagen))
             img_hsv = cv2.cvtColor(img_procesamiento, cv2.COLOR_BGR2HSV)
             puertas_detectadas, img_con_dibujos = self.algoritmoDetectarPuertasAruco(img_hsv, img_procesamiento.copy())
 
@@ -107,6 +110,31 @@ class NodoDeteccion(Node):
         except Exception as e_processing_callback:
             self.get_logger().error(f"Error general en callback_procesamiento_imagen: {e_processing_callback}")
             self.get_logger().error(traceback.format_exc())
+
+    def callback_procesamiento_imagen2(self, msg_imagen_ros):
+        try:
+            frame_bgr_raw = self.bridge.imgmsg_to_cv2(msg_imagen_ros, desired_encoding="bgr8")
+            
+            alto_real, ancho_real, _ = frame_bgr_raw.shape
+
+            self.ancho_imagen = ancho_real
+            self.alto_imagen = alto_real
+
+            self.camera_matrix[0, 2] = ancho_real / 2.0  
+            self.camera_matrix[1, 2] = alto_real / 2.0   
+
+            img_procesamiento = frame_bgr_raw 
+            
+            
+            img_hsv = cv2.cvtColor(img_procesamiento, cv2.COLOR_BGR2HSV)
+            
+            puertas_detectadas, img_con_dibujos = self.algoritmoDetectarPuertasAruco(img_hsv, img_procesamiento.copy())
+
+            ros_image_msg_out = self.bridge.cv2_to_imgmsg(img_con_dibujos, encoding="bgr8")
+            self.publicador_imagen_visualizacion.publish(ros_image_msg_out)
+
+        except Exception as e:
+            self.get_logger().error(f"Error: {e}")
 
     def publicar_punto(self, punto_mundo): #este se visualiza en RViz
         msg = PointStamped()
@@ -267,6 +295,7 @@ class NodoDeteccion(Node):
             todas_puertas_encontradas.extend(puertas_este_color)
 
         return todas_puertas_encontradas, img_visualizacion
+    
     def algoritmoDetectarPuertasAruco(self, img_hsv, img_visualizacion):
         todas_puertas_encontradas = []
         
@@ -274,9 +303,22 @@ class NodoDeteccion(Node):
         
         aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
         aruco_params = cv2.aruco.DetectorParameters()
+        aruco_params.adaptiveThreshWinSizeMin = 3
+        aruco_params.adaptiveThreshWinSizeMax = 30
+        aruco_params.adaptiveThreshWinSizeStep = 5 
+
+        aruco_params.polygonalApproxAccuracyRate = 0.05 
+        
+        aruco_params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+
+        aruco_params.perspectiveRemovePixelPerCell = 8
 
         corners, ids, rejected = cv2.aruco.detectMarkers(img_gray, aruco_dict, parameters=aruco_params)
-        
+        corners, ids, rejected = cv2.aruco.detectMarkers(img_gray, aruco_dict, parameters=aruco_params)
+
+        #if len(rejected) > 0:
+        #    cv2.aruco.drawDetectedMarkers(img_visualizacion, rejected, borderColor=(0, 0, 255))
+
         puntos_esquinas_detectados = []
 
         if ids is not None:
@@ -356,6 +398,7 @@ class NodoDeteccion(Node):
             punto_mundo, _ = self.transformar_punto_cuerpo_a_mundo(punto_cuerpo_pnp)
             self.distancia_estimada = None
             self.distancia_calculada = np.linalg.norm(punto_cuerpo_pnp)
+            self.distancia_estimada = self.distancia_calculada
             self.coordenada_X, self.coordenada_Y, self.coordenada_Z = punto_cuerpo_pnp
             self.punto_mundo = punto_mundo
 
@@ -374,7 +417,7 @@ class NodoDeteccion(Node):
             esquinas = [esq1, esq2, esq3, esq4]
             cv2.polylines(img_visualizacion, [np.array(esquinas, np.int32)], True, (0, 255, 0), 2)
             cv2.circle(img_visualizacion, (x_centro_puerta, y_centro_puerta), 5, (0, 255, 0), -1)
-            cv2.putText(img_visualizacion, f"Puerta ({punto_mundo[0]:.1f},{punto_mundo[1]:.1f},{angulo_yaw:.1f})",
+            cv2.putText(img_visualizacion, f"Puerta ({punto_mundo[0]:.1f},{punto_mundo[1]:.1f},{punto_mundo[2]:.1f} , A: {angulo_yaw:.1f})",
                             (x_centro_puerta - 50, y_centro_puerta - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2, cv2.LINE_AA)
 
@@ -389,6 +432,7 @@ class NodoDeteccion(Node):
             if self.punto_mundo is not None:
                 self.get_logger().info(f"Coordenadas del punto en mundo: ({self.punto_mundo[0]:.2f}, {self.punto_mundo[1]:.2f}, {self.punto_mundo[2]:.2f})")
             self.get_logger().info("-----------------------------")
+        else: self.get_logger().info("--- NO DISTANCIA---")
 
     def destroy_node(self):
         self.get_logger().info("Fin NodoDeteccion")
