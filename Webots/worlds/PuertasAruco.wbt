@@ -1,9 +1,9 @@
-#VRML_SIM R2025a utf8
+#VRML_SIM R2025b utf8
 
-EXTERNPROTO "webots://projects/objects/backgrounds/protos/TexturedBackground.proto"
-EXTERNPROTO "webots://projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
-EXTERNPROTO "webots://projects/objects/floors/protos/RectangleArena.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/develop/projects/robots/dji/mavic/protos/Mavic2Pro.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/RectangleArena.proto"
 
 WorldInfo {
   basicTimeStep 8
@@ -13,8 +13,8 @@ WorldInfo {
   }
 }
 Viewpoint {
-  orientation 0.02571044990045035 -0.9752737188969349 -0.21949976308611044 6.044027072076484
-  position -5.897425549091622 -1.064588454506922 2.730956038180034
+  orientation -0.0873213665796333 -0.882383248317829 0.4623578506165347 5.861507286738761
+  position -13.098251549354986 1.3947528401030016 5.994169697671113
 }
 TexturedBackground {
 }
