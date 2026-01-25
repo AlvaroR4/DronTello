@@ -3,14 +3,12 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32MultiArray
-from cv_bridge import CvBridge, CvBridgeError
+from cv_bridge import CvBridge
 import cv2
 import numpy as np
 import traceback
 import math
-from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
-import itertools
 
 ROS_TOPIC_IMAGEN_RAW_INPUT = 'tello/imagen'
 ROS_TOPIC_PUERTAS_DETECTADAS_OUTPUT = '/tello/puertas_detectadas'
@@ -19,9 +17,6 @@ ROS_TOPIC_POSE_ANGLES = '/tello/pose_corregida'
 
 ANCHO_IMAGEN = 960
 ALTO_IMAGEN = 720
-TOLERANCIA_PROPORCION = 0.60
-#COLOR_MIN = np.array([0, 100, 100])
-#COLOR_MAX = np.array([10, 255, 255])
 
 MIN_CORNER_AREA = 10
 
@@ -143,77 +138,6 @@ class NodoDeteccion(Node):
         rect[3] = pts[np.argmax(diff)]
         return rect
 
-    def es_rectangulo_valido(self, box, paralelismo_tol_deg=30.0, lado_ratio_tol=0.5):
-        box = np.array(box, dtype=float)
-        vecs = [box[(i + 1) % 4] - box[i] for i in range(4)]
-        lens = [np.linalg.norm(v) for v in vecs]
-        
-        if any(l == 0 for l in lens):
-            return False, float('inf')
-
-        vecs_u = [v / l for v, l in zip(vecs, lens)]
-
-        cross02 = abs(np.cross(vecs_u[0], vecs_u[2])) 
-        cross13 = abs(np.cross(vecs_u[1], vecs_u[3])) 
-        
-        ratio0 = abs(lens[0] - lens[2]) / max(lens[0], lens[2]) 
-        ratio1 = abs(lens[1] - lens[3]) / max(lens[1], lens[3]) 
-
-        score = 100.0 * (cross02 + cross13) + 100.0 * (ratio0 + ratio1)
-
-        paralelismo_tol_rad = math.sin(math.radians(paralelismo_tol_deg)) 
-
-        if cross02 < paralelismo_tol_rad and cross13 < paralelismo_tol_rad and ratio0 <= lado_ratio_tol and ratio1 <= lado_ratio_tol:
-            return True, score
-        
-        return False, score
-
-    def seleccionar_mejor_combinacion(self, puntos_esquinas):
-        if len(puntos_esquinas) < 4:
-            return None, None, float('inf'), None
-
-        mejor_error_proporcion = float('inf')
-        mejor_rect = None
-        mejor_combinacion_real = None
-
-        proporcion_ideal = ALTO_REAL / ANCHO_REAL
-        proporcion_ideal_ajustada = max(proporcion_ideal, 1 / proporcion_ideal)
-        min_proporcion_aceptable = proporcion_ideal_ajustada * (1 - TOLERANCIA_PROPORCION)
-        max_proporcion_aceptable = proporcion_ideal_ajustada * (1 + TOLERANCIA_PROPORCION)
-
-        for combinacion in itertools.combinations(puntos_esquinas, 4):
-            points_np = np.array(combinacion, dtype=np.int32)
-            puntos_reales_ordenados = self.ordenar_puntos(points_np)
-            es_rect, score_rect = self.es_rectangulo_valido(puntos_reales_ordenados)
-            if not es_rect:
-                continue
-
-            rect = cv2.minAreaRect(points_np)
-            (_, (width, height), _) = rect
-            if width <= 0 or height <= 0:
-                continue
-
-            if width > height:
-                proporcion_detectada = width / height
-            else:
-                proporcion_detectada = height / width
-
-            if proporcion_detectada < min_proporcion_aceptable or proporcion_detectada > max_proporcion_aceptable:
-                continue
-
-            error_proporcion = abs(proporcion_detectada - proporcion_ideal_ajustada)
-            if es_rect:
-                combined_error = error_proporcion + 0.001 * score_rect
-                if combined_error < mejor_error_proporcion:
-                    mejor_error_proporcion = combined_error
-                    mejor_rect = rect
-                    mejor_combinacion_real = combinacion
-        if mejor_combinacion_real is None:
-            return None, None, float('inf'), None
-        
-        puntos_reales_ordenados = self.ordenar_puntos(mejor_combinacion_real)
-        return puntos_reales_ordenados, mejor_rect, mejor_error_proporcion, mejor_combinacion_real
-
     def algoritmoDetectarPuertas(self, img_hsv, img_visualizacion):
         todas_puertas_encontradas = []
         kernel = np.ones((5,5), np.uint8)
@@ -267,6 +191,7 @@ class NodoDeteccion(Node):
             todas_puertas_encontradas.extend(puertas_este_color)
 
         return todas_puertas_encontradas, img_visualizacion
+    
     def algoritmoDetectarPuertasAruco(self, img_hsv, img_visualizacion):
         todas_puertas_encontradas = []
         
@@ -305,11 +230,9 @@ class NodoDeteccion(Node):
         if len(puntos_esquinas) < 4:
             return puertas
         
-        #puntos_reales_ordenados, mejor_rect, mejor_error_proporcion, _ = self.seleccionar_mejor_combinacion(puntos_esquinas)
         puntos_reales_ordenados = self.ordenar_puntos(puntos_esquinas)
         if puntos_reales_ordenados is not None:
             puntos_imagen_2d = np.array(puntos_reales_ordenados, dtype=np.float32)
-            #print(f"Puerta encontrada (de {len(puntos_esquinas)} LEDs). Error prop.: {mejor_error_proporcion:.3f}")
 
             esq1 = puntos_imagen_2d[0]  # Superior izquierda (TL)
             esq2 = puntos_imagen_2d[1]  # Superior derecha (TR)
