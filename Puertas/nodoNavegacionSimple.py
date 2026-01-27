@@ -62,10 +62,8 @@ class NodoNavegacion(Node):
     def callback_pose_dron(self, msg: Float32MultiArray):
         data = list(msg.data)
         if len(data) >= 6:
-            #self.posicion_dron_mundo = np.array([data[0], -data[1], -data[2]])#webots
-            self.posicion_dron_mundo = np.array([data[0], data[1], data[2]]) #tello
-            #self.yaw_dron_deg = -float(data[5]) #webots
-            self.yaw_dron_deg = float(data[5]) #tello
+            self.posicion_dron_mundo = np.array([data[0], data[1], data[2]])
+            self.yaw_dron_deg = float(data[5])
             self.pose_recibida = True
     
     def promediar_angulos_deg(self, angulo_actual, nuevo_angulo, n_actual, n_nuevo):
@@ -84,11 +82,9 @@ class NodoNavegacion(Node):
         if len(msg.data) < 4:
             return
         data = list(msg.data)
-        punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#tello
-        #punto_puerta_recibido = np.array([data[0], -data[1], -data[2]])#webots
+        punto_puerta_recibido = np.array([data[0], data[1], data[2]])
         punto_puerta_recibido[2] -= MARGEN_ALTURA_M
-        #angulo_recibido_deg = float(msg.data[3])#webots
-        angulo_recibido_deg = -float(msg.data[3])#tello
+        angulo_recibido_deg = float(msg.data[3])
         
         if self.puerta_para_promediar is None:
             self.puerta_para_promediar = {
@@ -168,7 +164,6 @@ class NodoNavegacion(Node):
                 self.detener_dron()
                 self.publicar_marcadores_rviz(borrar=True)
 
-
     def ir_a_posicion(self, punto_objetivo, yaw_objetivo_deg=None):
         rotacion = 0
         velocidad_deseada = punto_objetivo - self.posicion_dron_mundo
@@ -187,7 +182,7 @@ class NodoNavegacion(Node):
                 factor_aumento = AUMENTAR_VELOCIDAD
             avance *= factor_aumento
             lateral *= factor_aumento
-            vertical *= -factor_aumento
+            vertical *= factor_aumento
 
             if yaw_objetivo_deg is not None:
                 rotacion = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
@@ -219,12 +214,11 @@ class NodoNavegacion(Node):
         
         
         rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA_YAW)
-        self.enviar_comando_velocidad(0, 0, 0, rotacion) #tello
-        #self.enviar_comando_velocidad(0, 0, 0, -rotacion) #webots
+        self.enviar_comando_velocidad(0, 0, 0, rotacion)
         return False
 
     def enviar_comando_velocidad(self, lr, fb, ud, yv):
-        msg = Float32MultiArray(data=[float(-lr), float(fb), float(ud), float(yv)])
+        msg = Float32MultiArray(data=[float(lr), float(fb), float(ud), float(yv)])
         #msg = Float32MultiArray(data=[0,0,0,0])
         self.pub_velocidad.publish(msg)
 

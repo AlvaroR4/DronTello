@@ -149,23 +149,23 @@ class Tello(Node):
             self.tello.clockwise(0)
             self.tello.counter_clockwise(0)
 
-        if lr > 0:
-            self.tello.right(lr)
+        if lr < 0:
+            self.tello.right(abs(lr))
         else:
             self.tello.left(abs(lr))
     
         if fb > 0:
-            self.tello.forward(fb)
+            self.tello.forward(abs(fb))
         else:
             self.tello.backward(abs(fb))
     
-        if ud > 0:
-            self.tello.up(ud)
+        if ud < 0:
+            self.tello.up(abs(ud))
         else:
             self.tello.down(abs(ud))
     
-        if yv > 0:
-            self.tello.clockwise(yv)
+        if yv < 0:
+            self.tello.clockwise(abs(yv))
         else:
             self.tello.counter_clockwise(abs(yv))
 

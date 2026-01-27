@@ -86,16 +86,16 @@ class NodoTeclado(Node):
             self.avance -= VELOCIDAD_AVANCE
             nombre = "ATRÁS (s)"
         elif ch == 'a':
-            self.lateral -= VELOCIDAD_LATERAL
+            self.lateral += VELOCIDAD_LATERAL
             nombre = "IZQUIERDA (a)"
         elif ch == 'd':
-            self.lateral += VELOCIDAD_LATERAL
+            self.lateral -= VELOCIDAD_LATERAL
             nombre = "DERECHA (d)"
         elif ch == 'q':
-            self.yaw -= VELOCIDAD_YAW
+            self.yaw += VELOCIDAD_YAW
             nombre = "GIRAR IZQUIERDA (q)"
         elif ch == 'e':
-            self.yaw += VELOCIDAD_YAW
+            self.yaw -= VELOCIDAD_YAW
             nombre = "GIRAR DERECHA (e)"
         elif ch == 'y':
             self.vertical += VELOCIDAD_VERTICAL

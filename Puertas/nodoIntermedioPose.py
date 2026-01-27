@@ -168,8 +168,8 @@ class NodoIntermedioPose(Node):
                     self.z_previo = z_corr
 
                     out = Float32MultiArray()
-                    out.data = [float(x_corr), float(y_corr), float(z_corr),
-                    float(roll_corr), float(pitch_corr), float(yaw_corr)]
+                    out.data = [float(x_corr), float(-y_corr), float(-z_corr),
+                    float(roll_corr), float(pitch_corr), float(-yaw_corr)]
                     self.pub_pose.publish(out)
                 else: 
                     if abs(x_corr - self.x_previo) > MARGEN_ERROR_PUNTO or abs(y_corr - self.y_previo) > MARGEN_ERROR_PUNTO or abs(z_corr - self.z_previo) > MARGEN_ERROR_PUNTO:
@@ -180,8 +180,8 @@ class NodoIntermedioPose(Node):
                         self.y_previo = y_corr
                         self.z_previo = z_corr
                         out = Float32MultiArray()
-                        out.data = [float(x_corr), float(y_corr), float(z_corr),
-                                    float(roll_corr), float(pitch_corr), float(yaw_corr)]
+                        out.data = [float(x_corr), float(-y_corr), float(-z_corr),
+                                    float(roll_corr), float(pitch_corr), float(-yaw_corr)]
                         self.pub_pose.publish(out)
 
         except Exception as e:

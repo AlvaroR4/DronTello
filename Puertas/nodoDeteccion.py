@@ -20,8 +20,6 @@ ALTO_IMAGEN = 720
 
 MIN_CORNER_AREA = 10
 
-#ALTO_REAL = 0.56
-#ANCHO_REAL = 0.375
 ALTO_REAL = 1.3
 ANCHO_REAL = 1.0
 FOCAL = 617.0
@@ -82,12 +80,10 @@ class NodoDeteccion(Node):
     def callback_pose(self, msg: Float32MultiArray):
         data = list(msg.data)
         if len(data) >= 6:
-            #self.pos_dron_mundo = np.array([data[0], -data[1], -data[2]])#tello
-            self.pos_dron_mundo = np.array([data[0], data[1], data[2]]) #webots
+            self.pos_dron_mundo = np.array([data[0], data[1], data[2]])
             self.roll = float(data[3])
             self.pitch = float(data[4])
-            #self.yaw = -float(data[5]) #tello
-            self.yaw = float(data[5]) #webots
+            self.yaw = float(data[5])
 
     def callback_procesamiento_imagen(self, msg_imagen_ros):
         try:
@@ -272,7 +268,8 @@ class NodoDeteccion(Node):
                 angulo_yaw = -angulo_yaw
                 
             angulo_yaw = (angulo_yaw + 180) % 360 - 180
-                
+            angulo_yaw = -angulo_yaw #revisar para que coincida con los nuevos ejes
+            
             tvec_camara = tvec.reshape(3)
             punto_cuerpo_pnp = np.array([tvec_camara[2], -tvec_camara[0], -tvec_camara[1]])
 
