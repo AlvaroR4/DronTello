@@ -83,7 +83,7 @@ class NodoNavegacion(Node):
             return
         data = list(msg.data)
         punto_puerta_recibido = np.array([data[0], data[1], data[2]])
-        punto_puerta_recibido[2] -= MARGEN_ALTURA_M
+        punto_puerta_recibido[2] += MARGEN_ALTURA_M
         angulo_recibido_deg = float(msg.data[3])
         
         if self.puerta_para_promediar is None:

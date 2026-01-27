@@ -262,13 +262,13 @@ class NodoDeteccion(Node):
 
             #self.get_logger().info(f"==== : {nuevo_angulo:.2f}")
 
-            if (largo_lado_izq < largo_lado_der):
-                angulo_yaw = abs(angulo_yaw)
-            else:
-                angulo_yaw = -angulo_yaw
+            #if (largo_lado_izq < largo_lado_der):
+            #    angulo_yaw = abs(angulo_yaw)
+            #else:
+            #    angulo_yaw = -angulo_yaw
                 
             angulo_yaw = (angulo_yaw + 180) % 360 - 180
-            angulo_yaw = -angulo_yaw #revisar para que coincida con los nuevos ejes
+            #angulo_yaw = -angulo_yaw #revisar para que coincida con los nuevos ejes
             
             tvec_camara = tvec.reshape(3)
             punto_cuerpo_pnp = np.array([tvec_camara[2], -tvec_camara[0], -tvec_camara[1]])
