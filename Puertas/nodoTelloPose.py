@@ -159,7 +159,7 @@ class Tello(Node):
         else:
             self.tello.backward(abs(fb))
     
-        if ud < 0:
+        if ud > 0:
             self.tello.up(abs(ud))
         else:
             self.tello.down(abs(ud))
