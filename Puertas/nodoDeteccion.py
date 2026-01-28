@@ -20,9 +20,10 @@ ALTO_IMAGEN = 720
 
 MIN_CORNER_AREA = 10
 
-ALTO_REAL = 1.3
-ANCHO_REAL = 1.0
-FOCAL = 617.0
+ALTO_REAL = 1.0
+ANCHO_REAL = 0.5
+FOCAL = 900.0 #tello
+#FOCAL = 617.0 #webots
 
 class NodoDeteccion(Node):
     def __init__(self):
@@ -191,33 +192,48 @@ class NodoDeteccion(Node):
     def algoritmoDetectarPuertasAruco(self, img_hsv, img_visualizacion):
         todas_puertas_encontradas = []
         
+        config_arucos = [
+            {
+                "nombre": "id7",
+                "color": (0, 0, 255),
+                "id": 7
+            },
+            {
+                "nombre": "id3",
+                "color": (255, 0, 0),
+                "id": 3
+            }
+        ]
+
         img_gray = cv2.cvtColor(img_visualizacion, cv2.COLOR_BGR2GRAY)
         
         aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
         aruco_params = cv2.aruco.DetectorParameters()
 
         corners, ids, rejected = cv2.aruco.detectMarkers(img_gray, aruco_dict, parameters=aruco_params)
-        
-        puntos_esquinas_detectados = []
 
         if ids is not None:
             ids = ids.flatten()
             
-            for (marker_corners, marker_id) in zip(corners, ids):
-                if marker_id == 7:
-                    pts = marker_corners.reshape((4, 2))
-                    
-                    cx = int(np.mean(pts[:, 0]))
-                    cy = int(np.mean(pts[:, 1]))
-                    
-                    puntos_esquinas_detectados.append((cx, cy))
-                    
-                    cv2.polylines(img_visualizacion, [pts.astype(int)], True, (0, 255, 0), 2)
-                    cv2.circle(img_visualizacion, (cx, cy), 5, (0, 0, 255), -1)
-                    # cv2.putText(img_visualizacion, f"ID:{marker_id}", (cx, cy-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
-
-        puertas_encontradas = self.tratarPuerta(puntos_esquinas_detectados, img_visualizacion)
-        todas_puertas_encontradas.extend(puertas_encontradas)
+            for configuracion in config_arucos:
+                id_buscado = configuracion["id"]
+                puntos_esquinas_detectados = []
+                
+                for (marker_corners, marker_id) in zip(corners, ids):
+                    if marker_id == id_buscado:
+                        pts = marker_corners.reshape((4, 2))
+                        
+                        cx = int(np.mean(pts[:, 0]))
+                        cy = int(np.mean(pts[:, 1]))
+                        
+                        puntos_esquinas_detectados.append((cx, cy))
+                        
+                        cv2.polylines(img_visualizacion, [pts.astype(int)], True, (0, 255, 0), 2)
+                        cv2.circle(img_visualizacion, (cx, cy), 5, configuracion["color"], -1)
+                
+                if len(puntos_esquinas_detectados) > 0:
+                    puertas_encontradas = self.tratarPuerta(puntos_esquinas_detectados, img_visualizacion)
+                    todas_puertas_encontradas.extend(puertas_encontradas)
 
         return todas_puertas_encontradas, img_visualizacion
 
