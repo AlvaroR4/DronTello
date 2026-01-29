@@ -10,7 +10,7 @@ RUTA_SCRIPTS="~/DronTello/Puertas"
 if [ "$1" == "Aruco" ]; then
     DETECTION_NODE="nodoArucoDeteccion.py"
 elif [ "$1" == "Puertas" ]; then
-    DETECTION_NODE="nodoDeteccion3.py"
+    DETECTION_NODE="nodoDeteccion.py"
 else
     echo "Uso: $0 [Aruco|Puertas]"
     exit 1

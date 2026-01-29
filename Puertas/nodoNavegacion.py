@@ -6,17 +6,18 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-DISTANCIA_APROXIMACION_M = 1.5
-DISTANCIA_SALIDA_M = 1.5
+DISTANCIA_APROXIMACION_M = 0.8
+DISTANCIA_SALIDA_M = 1.2
 MARGEN_ALTURA_M = 0.0
-AUMENTAR_VELOCIDAD = 15.0
+AUMENTAR_VELOCIDAD = 25.0
 AUMENTAR_YAW = 8.0
 VELOCIDAD_MAXIMA = 30
-VELOCIDAD_MAXIMA_YAW = 15.0
-DISTANCIA_NUEVA_PUERTA_M = 1.0
-ERROR_POSICION_M = 0.08
+VELOCIDAD_MINIMA = 12
+VELOCIDAD_MAXIMA_YAW = 12.0
+ERROR_POS_MIN = 0.10
+ERROR_POS_MAX = 1.3 
 ERROR_YAW_DEG = 2.0
-DISTANCIA_FILTRO_REPETIDA = 0.75  
+DISTANCIA_NUEVA_PUERTA = 1.25 
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -131,12 +132,12 @@ class NodoNavegacion(Node):
         angulo_recibido = float(msg.data[3]) 
 
         for p_vis in self.puertas_visitadas:
-            if np.linalg.norm(p_vis - punto_recibido) < DISTANCIA_FILTRO_REPETIDA :
+            if np.linalg.norm(p_vis - punto_recibido) < DISTANCIA_NUEVA_PUERTA :
                 return
 
         puerta_existente = False
         for puerta in self.puertas_pendientes:
-            if np.linalg.norm(puerta['punto'] - punto_recibido) < DISTANCIA_FILTRO_REPETIDA :
+            if np.linalg.norm(puerta['punto'] - punto_recibido) < DISTANCIA_NUEVA_PUERTA :
                 n = puerta['n_muestras']
                 puerta['punto'] = (puerta['punto'] * n + punto_recibido) / (n + 1)
                 puerta['angulo'] = self.promediar_angulos_deg(puerta['angulo'], angulo_recibido, n, 1)
@@ -168,7 +169,7 @@ class NodoNavegacion(Node):
             objetivo = self.puntos_trayectoria_actual[0]
             if self.ir_a_posicion(objetivo):
                 self.get_logger().info(f"Punto de aproximación alcanzado. Rotando a {self.angulo_objetivo_deg:.1f}º")
-                self.estado_mision = 'ROTAR_HACIA_PUERTA'
+                self.estado_mision = 'IR_A_PUNTO_SALIDA'
 
         elif self.estado_mision == 'ROTAR_HACIA_PUERTA':
             if self.rotar_a_yaw():
@@ -199,51 +200,55 @@ class NodoNavegacion(Node):
 
         elif self.estado_mision == 'FIN_MISION':
             self.detener_dron()
-            #self.enviar_comando_velocidad(2,0,0,0)
+            self.enviar_comando_velocidad(2,0,0,0)
             self.publicar_marcadores_rviz(borrar=True)
             self.mision_en_curso = False
 
-    def ir_a_posicion(self, punto_objetivo, yaw_objetivo_deg=None):
-        rotacion = 0
-        velocidad_deseada = punto_objetivo - self.posicion_dron_mundo
-        distancia_al_objetivo = np.linalg.norm(velocidad_deseada)
-
-        avance = velocidad_deseada[0]
-        lateral = velocidad_deseada[1]
-        vertical = velocidad_deseada[2]
-
-        distancia_maxima = max(abs(avance),abs(lateral),abs(vertical))
-        if distancia_maxima > 0:
-            velocidad_maxima_eje = distancia_maxima * AUMENTAR_VELOCIDAD
-            if velocidad_maxima_eje > VELOCIDAD_MAXIMA:
-                factor_aumento = VELOCIDAD_MAXIMA / distancia_maxima
-            else: 
-                factor_aumento = AUMENTAR_VELOCIDAD
-            avance *= factor_aumento
-            lateral *= factor_aumento
-            vertical *= factor_aumento
-
-            if yaw_objetivo_deg is not None:
-                rotacion = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
-                if abs(rotacion) > VELOCIDAD_MAXIMA_YAW:
-                    if rotacion < 0:
-                        rotacion = -VELOCIDAD_MAXIMA_YAW
-                    else: 
-                        rotacion = VELOCIDAD_MAXIMA_YAW
+    def mapear_valor(self, valor, in_min, in_max, out_min, out_max):
+        if valor <= in_min:
+            return out_min
+        if valor >= in_max:
+            return out_max
         
-        yaw_rad = math.radians(self.yaw_dron_deg)
+        pendiente = (out_max - out_min) / (in_max - in_min)
+        return out_min + (valor - in_min) * pendiente
+    
+    def ir_a_posicion(self, punto_objetivo, yaw_objetivo_deg=None):
+        error_posicion = punto_objetivo - self.posicion_dron_mundo
+        magnitud_error = np.linalg.norm(error_posicion)
+
+        if magnitud_error < ERROR_POS_MIN:
+            return True
+
+        avance_norm = error_posicion[0] / magnitud_error
+        lateral_norm = error_posicion[1] / magnitud_error
+        vertical_norm = error_posicion[2] / magnitud_error
+
+        velocidad_magnitud = self.mapear_valor(magnitud_error, ERROR_POS_MIN, ERROR_POS_MAX, VELOCIDAD_MINIMA, VELOCIDAD_MAXIMA)
+
+        vx = avance_norm * velocidad_magnitud
+        vy = lateral_norm * velocidad_magnitud
+        vz = vertical_norm * velocidad_magnitud
+
+        rotacion = 0
+        if yaw_objetivo_deg is not None:
+            rotacion = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
+            rotacion = np.clip(rotacion * AUMENTAR_YAW, -VELOCIDAD_MAXIMA_YAW, VELOCIDAD_MAXIMA_YAW)
+            if 0 < abs(rotacion) < VELOCIDAD_MINIMA:
+                rotacion = VELOCIDAD_MINIMA * (1 if rotacion > 0 else -1)
         
         # Fórmula de rotación de vectores 2D:
         # V_fb = V_x_mundo * cos(yaw) + V_y_mundo * sin(yaw)
         # V_lr = -V_x_mundo * sin(yaw) + V_y_mundo * cos(yaw)
-        
-        avance_cuerpo = avance * math.cos(yaw_rad) + lateral * math.sin(yaw_rad)
-        lateral_cuerpo = -avance * math.sin(yaw_rad) + lateral * math.cos(yaw_rad)
-        
-        self.enviar_comando_velocidad(lateral_cuerpo, avance_cuerpo, vertical, rotacion)
-        #self.detener_dron()                
-        return distancia_al_objetivo < ERROR_POSICION_M
 
+        yaw_rad = math.radians(self.yaw_dron_deg)
+        avance_cuerpo = vx * math.cos(yaw_rad) + vy * math.sin(yaw_rad)
+        lateral_cuerpo = -vx * math.sin(yaw_rad) + vy * math.cos(yaw_rad)
+        
+        self.enviar_comando_velocidad(lateral_cuerpo, avance_cuerpo, vz, rotacion)
+        
+        return False
+    
     def rotar_a_yaw(self):
         error_yaw = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
         
