@@ -53,6 +53,7 @@ class NodoDeteccion(Node):
         self.coordenada_Y = None
         self.coordenada_Z = None
         self.punto_mundo = None
+        self.pose_recibida = False
 
         self.pub_punto_a = self.create_publisher(Float32MultiArray, '/tello/punto_y_angulo', 10)
 
@@ -86,7 +87,14 @@ class NodoDeteccion(Node):
             self.pitch = float(data[4])
             self.yaw = float(data[5])
 
+        if not self.pose_recibida:
+                self.pose_recibida = True
+                self.get_logger().info("Pose recibida. Detección activada.")
+
     def callback_procesamiento_imagen(self, msg_imagen_ros):
+        if not self.pose_recibida:
+            return
+        
         try:
             frame_bgr_raw = self.bridge.imgmsg_to_cv2(msg_imagen_ros, desired_encoding="bgr8")
             img_procesamiento = cv2.resize(frame_bgr_raw, (ANCHO_IMAGEN, ALTO_IMAGEN))

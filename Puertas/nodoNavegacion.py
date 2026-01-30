@@ -6,15 +6,14 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-DISTANCIA_APROXIMACION_M = 0.8
-DISTANCIA_SALIDA_M = 1.2
+DISTANCIA_APROXIMACION_M = 1.2
+DISTANCIA_SALIDA_M = 1.0
 MARGEN_ALTURA_M = 0.0
-AUMENTAR_VELOCIDAD = 25.0
 AUMENTAR_YAW = 8.0
-VELOCIDAD_MAXIMA = 30
-VELOCIDAD_MINIMA = 12
+VELOCIDAD_MAXIMA = 20
+VELOCIDAD_MINIMA = 16
 VELOCIDAD_MAXIMA_YAW = 12.0
-ERROR_POS_MIN = 0.10
+ERROR_POS_MIN = 0.16
 ERROR_POS_MAX = 1.3 
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
@@ -111,13 +110,15 @@ class NodoNavegacion(Node):
             rad = math.radians(angulo_obj)
             normal = np.array([math.cos(rad), math.sin(rad), 0.0])
             
-            p_aprox = punto_central - DISTANCIA_APROXIMACION_M * normal
-            p_salida = punto_central + DISTANCIA_SALIDA_M * normal
+            p1 = punto_central - DISTANCIA_APROXIMACION_M * normal
+            p2 = punto_central - DISTANCIA_APROXIMACION_M/2 * normal
+            p3 = punto_central + DISTANCIA_SALIDA_M/2 * normal
+            p4 = punto_central + DISTANCIA_SALIDA_M * normal
             
-            self.puntos_trayectoria_actual = [p_aprox, punto_central, p_salida]
-            self.publicar_marcadores_rviz()
+            self.puntos_trayectoria_actual = [p1, p2, p3, p4]
+            #self.publicar_marcadores_rviz()
             
-            self.estado_mision = 'IR_A_PUNTO_APROXIMACION'
+            self.estado_mision = 'IR_A_P1'
             self.mision_en_curso = True
             dist = np.linalg.norm(target['punto'] - self.posicion_dron_mundo)
             self.get_logger().info(f"Navegando a puerta a {dist:.2f}m. Ángulo entrada: {angulo_obj:.1f}º")
@@ -139,12 +140,16 @@ class NodoNavegacion(Node):
         for puerta in self.puertas_pendientes:
             if np.linalg.norm(puerta['punto'] - punto_recibido) < DISTANCIA_NUEVA_PUERTA :
                 n = puerta['n_muestras']
-                puerta['punto'] = (puerta['punto'] * n + punto_recibido) / (n + 1)
-                puerta['angulo'] = self.promediar_angulos_deg(puerta['angulo'], angulo_recibido, n, 1)
+                peso_historico = (n * (n + 1)) / 2
+                peso_nuevo = n + 1
+                numerador = (puerta['punto'] * peso_historico) + (punto_recibido * peso_nuevo)
+                denominador = peso_historico + peso_nuevo
+                puerta['punto'] = numerador / denominador
+                puerta['angulo'] = self.promediar_angulos_deg(puerta['angulo'], angulo_recibido, peso_historico, peso_nuevo)
                 puerta['n_muestras'] += 1
                 puerta_existente = True
                 break
-        
+
         if not puerta_existente:
             nueva_puerta = {
                 'punto': punto_recibido,
@@ -165,21 +170,33 @@ class NodoNavegacion(Node):
                 self.detener_dron()
             return
 
-        if self.estado_mision == 'IR_A_PUNTO_APROXIMACION':
+        if self.estado_mision == 'IR_A_P1':
             objetivo = self.puntos_trayectoria_actual[0]
-            if self.ir_a_posicion(objetivo):
-                self.get_logger().info(f"Punto de aproximación alcanzado. Rotando a {self.angulo_objetivo_deg:.1f}º")
-                self.estado_mision = 'IR_A_PUNTO_SALIDA'
+            if self.ir_a_posicion(objetivo, despacio = False):
+                self.get_logger().info(f"P1 alcanzado")
+                self.estado_mision = 'IR_A_P2'
+        
+        if self.estado_mision == 'IR_A_P2':
+            objetivo = self.puntos_trayectoria_actual[1]
+            if self.ir_a_posicion(objetivo, despacio = True):
+                self.get_logger().info(f"P2 alcanzado")
+                self.estado_mision = 'IR_A_P3'
+
+        if self.estado_mision == 'IR_A_P3':
+            objetivo = self.puntos_trayectoria_actual[2]
+            if self.ir_a_posicion(objetivo, despacio = True):
+                self.get_logger().info(f"P3 alcanzado")
+                self.estado_mision = 'IR_A_P4'
 
         elif self.estado_mision == 'ROTAR_HACIA_PUERTA':
             if self.rotar_a_yaw():
                 self.get_logger().info("Alineado. Cruzando hacia punto de salida...")
-                self.estado_mision = 'IR_A_PUNTO_SALIDA'
+                self.estado_mision = 'IR_A_P2'
 
-        elif self.estado_mision == 'IR_A_PUNTO_SALIDA':
-            objetivo = self.puntos_trayectoria_actual[2]
+        elif self.estado_mision == 'IR_A_P4':
+            objetivo = self.puntos_trayectoria_actual[3]
             
-            if self.ir_a_posicion(objetivo):
+            if self.ir_a_posicion(objetivo, despacio = True):
                 self.get_logger().info("--- PUERTA CRUZADA ---")
                 
                 if 0 <= self.indice_objetivo_actual < len(self.puertas_pendientes):
@@ -201,7 +218,7 @@ class NodoNavegacion(Node):
         elif self.estado_mision == 'FIN_MISION':
             self.detener_dron()
             self.enviar_comando_velocidad(2,0,0,0)
-            self.publicar_marcadores_rviz(borrar=True)
+            #self.publicar_marcadores_rviz(borrar=True)
             self.mision_en_curso = False
 
     def mapear_valor(self, valor, in_min, in_max, out_min, out_max):
@@ -213,7 +230,7 @@ class NodoNavegacion(Node):
         pendiente = (out_max - out_min) / (in_max - in_min)
         return out_min + (valor - in_min) * pendiente
     
-    def ir_a_posicion(self, punto_objetivo, yaw_objetivo_deg=None):
+    def ir_a_posicion(self, punto_objetivo, despacio, yaw_objetivo_deg=None):
         error_posicion = punto_objetivo - self.posicion_dron_mundo
         magnitud_error = np.linalg.norm(error_posicion)
 
@@ -223,8 +240,10 @@ class NodoNavegacion(Node):
         avance_norm = error_posicion[0] / magnitud_error
         lateral_norm = error_posicion[1] / magnitud_error
         vertical_norm = error_posicion[2] / magnitud_error
-
-        velocidad_magnitud = self.mapear_valor(magnitud_error, ERROR_POS_MIN, ERROR_POS_MAX, VELOCIDAD_MINIMA, VELOCIDAD_MAXIMA)
+        if despacio:
+            velocidad_magnitud = self.mapear_valor(magnitud_error, ERROR_POS_MIN, ERROR_POS_MAX, VELOCIDAD_MINIMA, VELOCIDAD_MINIMA)
+        else: 
+            velocidad_magnitud = self.mapear_valor(magnitud_error, ERROR_POS_MIN, ERROR_POS_MAX, VELOCIDAD_MINIMA/2, VELOCIDAD_MAXIMA)
 
         vx = avance_norm * velocidad_magnitud
         vy = lateral_norm * velocidad_magnitud

@@ -5,212 +5,156 @@ from std_msgs.msg import Float32MultiArray, Bool
 import threading
 import traceback
 
-TOPIC_TELLO_POS_IN = '/tello/pose'         # [altura, x, y, z, (roll_deg, pitch_deg, yaw_deg)]
-TOPIC_POSE_OUT = '/tello/pose_corregida'          # publica: [x_corr, y_corr, z_corr, roll_deg, pitch_deg, yaw_deg]
+TOPIC_TELLO_POS_IN = '/tello/pose'        
+TOPIC_POSE_OUT = '/tello/pose_corregida'
 TOPIC_RESET_OFFSET = '/tello/pose_angles/reset'  
-MARGEN_ERROR_PUNTO = 2.0
-ESPERA_TAKEOFF = 8.0  # segundos de espera desde la primera lectura
+ESPERA_TAKEOFF = 11.0  
 
 class NodoIntermedioPose(Node):
     def __init__(self):
         super().__init__('nodo_intermedio_pose')
-        self.get_logger().info('Iniciando nodoIntermiedioPose')
+        self.get_logger().info('--- NODO INTERMEDIO POSE --')
 
         self.post_takeoff_delay = ESPERA_TAKEOFF
 
-        self.offset_pos = [0.0, 0.0, 0.0]
-        self.offset_angles = [0.0, 0.0, 0.0]
+        self.offset_pos = [0.0, 0.0, 0.0]    
+        self.offset_angles = [0.0, 0.0, 0.0] 
+        
         self.origin_fijado = False
         self.primera_lectura = True
         self.first_pose_received = False
         self.wait_timer = None
         self.last_pose = None
+        
+        self.x_previo = 0.0
+        self.y_previo = 0.0
+        self.z_previo = 0.0
 
-        qos_sub = QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
-                             history=HistoryPolicy.KEEP_LAST, depth=10)
-        qos_pub = QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
-                             history=HistoryPolicy.KEEP_LAST, depth=10)
+        qos_reliable = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST, depth=10)
 
-        self.sub_pos = self.create_subscription(
-            Float32MultiArray,
-            TOPIC_TELLO_POS_IN,
-            self.callback_posicion,
-            qos_sub
-        )
-        self.pub_pose = self.create_publisher(Float32MultiArray, TOPIC_POSE_OUT, qos_pub)
-
+        self.sub_pos = self.create_subscription(Float32MultiArray, TOPIC_TELLO_POS_IN, self.callback_posicion, qos_reliable)
+        self.pub_pose = self.create_publisher(Float32MultiArray, TOPIC_POSE_OUT, qos_reliable)
+        
         try:
-            self.sub_reset = self.create_subscription(
-                Bool,
-                TOPIC_RESET_OFFSET,
-                self.callback_reset_offset,
-                qos_sub
-            )
+            self.sub_reset = self.create_subscription(Bool, TOPIC_RESET_OFFSET, self.callback_reset_offset, qos_reliable)
         except Exception:
-            self.sub_reset = None
-
-        self.get_logger().info(f"Escuchando {TOPIC_TELLO_POS_IN} y publicando {TOPIC_POSE_OUT}")
-        self.get_logger().info(f"Tiempo de espera para fijar origen: {self.post_takeoff_delay} s")
+            pass
 
     def callback_reset_offset(self, msg: Bool):
         if msg.data:
             self._cancel_timer_if_any()
-            self.offset_pos = [0.0, 0.0, 0.0]
-            self.offset_angles = [0.0, 0.0, 0.0]
-            self.x_previo = 0.0
-            self.y_previo = 0.0
-            self.z_previo = 0.0
             self.origin_fijado = False
             self.first_pose_received = False
-            self.last_pose = None
-            self.get_logger().info("Offset reseteado manualmente (/tello/pose_angles/reset).")
+            self.offset_pos = [0.0, 0.0, 0.0]
+            self.get_logger().info("RESET MANUAL: Offset borrado.")
 
     def _cancel_timer_if_any(self):
         try:
             if self.wait_timer is not None:
-                try:
-                    self.wait_timer.cancel()
-                except Exception:
-                    pass
+                self.wait_timer.cancel()
                 self.wait_timer = None
         except Exception:
             pass
 
     def _timer_callback_set_origin(self):
         try:
-            if self.last_pose is None:
-                self.get_logger().warning("Temporizador expiró pero no hay pose registrada. No se fija origen.")
-                return
+            if self.last_pose is None: return
 
             data = list(self.last_pose)
+            if len(data) < 4: return
 
-            if len(data) >= 4:
-                # data[0]=altura, data[1]=x, data[2]=y, data[3]=z
-                self.altura_origen = float(data[0])
-                x = float(data[1])
-                y = float(data[2])
-                z = float(data[3])
-            else:
-                # estructura inesperada -> no fijamos origen
-                self.get_logger().warning("Estructura de primera pose inesperada, no se pudo fijar origen.")
-                return
+            
+            z_altimetro_real = float(data[0]) 
+            z_mvo_actual = -float(data[3]) 
+            
+            x_actual = float(data[1])
+            y_actual = float(data[2])
+            
+            offset_z = z_mvo_actual - z_altimetro_real
 
-            roll = 0.0
-            pitch = 0.0
-            yaw = 0.0
+            self.offset_pos = [x_actual, y_actual, offset_z] 
+            
+            roll = 0.0; pitch = 0.0; yaw = 0.0
             if len(data) >= 7:
-                roll = float(data[4])
-                pitch = float(data[5])
-                yaw = float(data[6])
+                roll = float(data[4]); pitch = float(data[5]); yaw = float(data[6])
             elif len(data) >= 5:
                 yaw = float(data[4])
-
-            self.offset_pos = [x, y, z]
+            
             self.offset_angles = [roll, pitch, yaw]
             self.origin_fijado = True
-            self.get_logger().info(f"Origen fijado (0,0,0). Offset guardado: pos={self.offset_pos}, angles={self.offset_angles}")
+            
+            self.get_logger().info(f"--- ORIGEN FIJADO ---")
 
         except Exception as e:
-            self.get_logger().error(f"Error en timer callback al fijar origen: {e}")
-            self.get_logger().error(traceback.format_exc())
+            self.get_logger().error(f"Error timer: {e}")
         finally:
             self.wait_timer = None
 
     def callback_posicion(self, msg: Float32MultiArray):
         try:
             data = list(msg.data)
-            if len(data) < 4:
-                self.get_logger().warning("msg /tello/posicion con datos insuficientes (<4). Ignorando.")
-                return
-
+            if len(data) < 4: return
             self.last_pose = data
 
             if (not self.first_pose_received) and (not self.origin_fijado):
                 self.first_pose_received = True
-                # arrancar temporizador 
-                self.get_logger().info(f"Primera pose recibida: iniciando espera de {self.post_takeoff_delay}s antes de fijar origen.")
                 self._cancel_timer_if_any()
                 self.wait_timer = threading.Timer(self.post_takeoff_delay, self._timer_callback_set_origin)
                 self.wait_timer.daemon = True
                 self.wait_timer.start()
+            
+            if not self.origin_fijado:
+                return
+            
+            z_raw = -float(data[3]) 
+            x_raw = float(data[1])
+            y_raw = float(data[2])
 
-            altura = float(data[0])
-            x = float(data[1])
-            y = float(data[2])
-            z = float(data[3])
-
-            roll = 0.0
-            pitch = 0.0
-            yaw = 0.0
+            roll = 0.0; pitch = 0.0; yaw = 0.0
             if len(data) >= 7:
-                roll = float(data[4])
-                pitch = float(data[5])
-                yaw = float(data[6])
+                roll = float(data[4]); pitch = float(data[5]); yaw = float(data[6])
             elif len(data) >= 5:
                 yaw = float(data[4])
 
-            if self.origin_fijado:
-                x_corr = x - self.offset_pos[0]
-                y_corr = y - self.offset_pos[1]
-                z_corr = z - self.offset_pos[2] -self.altura_origen
-                roll_corr = roll - self.offset_angles[0]
-                pitch_corr = pitch - self.offset_angles[1]
-                yaw_corr = yaw - self.offset_angles[2]
-            else:
-                x_corr, y_corr, z_corr = x, y, z
-                roll_corr, pitch_corr, yaw_corr = roll, pitch, yaw
+            x_corr = x_raw - self.offset_pos[0]
+            y_corr = y_raw - self.offset_pos[1]
+            z_corr = z_raw - self.offset_pos[2] 
+            
+            yaw_corr = yaw - self.offset_angles[2]
+            roll_corr = roll - self.offset_angles[0]
+            pitch_corr = pitch - self.offset_angles[1]
 
-            if self.origin_fijado:
-                if self.primera_lectura: 
-                    self.primera_lectura = False
-                    self.x_previo = x_corr 
-                    self.y_previo = y_corr
-                    self.z_previo = z_corr
+            out = Float32MultiArray()
+            out.data = [
+                float(x_corr), 
+                float(-y_corr), 
+                float(z_corr),   
+                float(roll_corr), 
+                float(pitch_corr), 
+                float(-yaw_corr) 
+            ]
+            self.pub_pose.publish(out)
 
-                    out = Float32MultiArray()
-                    out.data = [float(x_corr), float(-y_corr), float(-z_corr),
-                    float(roll_corr), float(pitch_corr), float(-yaw_corr)]
-                    self.pub_pose.publish(out)
-                else: 
-                    if abs(x_corr - self.x_previo) > MARGEN_ERROR_PUNTO or abs(y_corr - self.y_previo) > MARGEN_ERROR_PUNTO or abs(z_corr - self.z_previo) > MARGEN_ERROR_PUNTO:
-                        self.get_logger().info("DESCARTADO PUNTO")
-                        pass 
-                    else:
-                        self.x_previo = x_corr 
-                        self.y_previo = y_corr
-                        self.z_previo = z_corr
-                        out = Float32MultiArray()
-                        out.data = [float(x_corr), float(-y_corr), float(-z_corr),
-                                    float(roll_corr), float(pitch_corr), float(-yaw_corr)]
-                        self.pub_pose.publish(out)
+            self.x_previo = x_corr
+            self.y_previo = -y_corr
+            self.z_previo = z_corr
 
         except Exception as e:
-            self.get_logger().error(f"Error en callback_posicion: {e}")
-            self.get_logger().error(traceback.format_exc())
+            self.get_logger().error(f"Error callback: {e}")
 
     def destroy_node(self):
-        try:
-            self._cancel_timer_if_any()
-        except Exception:
-            pass
-        self.get_logger().info("Fin nodoIntermiedioPose")
+        self._cancel_timer_if_any()
         super().destroy_node()
-
 
 def main(args=None):
     rclpy.init(args=args)
-    nodo = None
+    nodo = NodoIntermedioPose()
     try:
-        nodo = NodoIntermedioPose()
         rclpy.spin(nodo)
     except KeyboardInterrupt:
         pass
-    except Exception as e:
-        if nodo:
-            nodo.get_logger().fatal(traceback.format_exc())
     finally:
-        if nodo:
-            nodo.destroy_node()
+        nodo.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
 

@@ -130,7 +130,7 @@ class Tello(Node):
         #comandos especiales
         if lr == 2 and fb == 0 and ud == 0:
             self.get_logger().info("Comando: land")
-            self.tello.land()
+            self.tello.palm_land()
         elif lr == 2 and fb == 2 and ud == 0:
             self.get_logger().info("Comando: emergency")
             self.tello.emergency()
