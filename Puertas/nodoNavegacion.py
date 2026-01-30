@@ -1,3 +1,7 @@
+#a P1 ponerle un radio de error mucho mayor y que llegue a P1 ya rotado y orientado
+#hacer pruebas y reducir la velocidad entre puntos al pasar la puerta
+#si es necesario no dejarle que corijja lateral al cruzar la puerta
+#Lookahead
 import math
 import numpy as np
 import rclpy
@@ -116,7 +120,6 @@ class NodoNavegacion(Node):
             p4 = punto_central + DISTANCIA_SALIDA_M * normal
             
             self.puntos_trayectoria_actual = [p1, p2, p3, p4]
-            #self.publicar_marcadores_rviz()
             
             self.estado_mision = 'IR_A_P1'
             self.mision_en_curso = True
@@ -218,7 +221,6 @@ class NodoNavegacion(Node):
         elif self.estado_mision == 'FIN_MISION':
             self.detener_dron()
             self.enviar_comando_velocidad(2,0,0,0)
-            #self.publicar_marcadores_rviz(borrar=True)
             self.mision_en_curso = False
 
     def mapear_valor(self, valor, in_min, in_max, out_min, out_max):
@@ -288,6 +290,23 @@ class NodoNavegacion(Node):
     def detener_dron(self):
         self.enviar_comando_velocidad(0, 0, 0, 0)
 
+def main(args=None):
+    rclpy.init(args=args)
+    nodo_navegacion = NodoNavegacion()
+    try:
+        rclpy.spin(nodo_navegacion)
+    except KeyboardInterrupt:
+        nodo_navegacion.get_logger().info("Ctrl+C")
+    finally:
+        nodo_navegacion.detener_dron()
+        nodo_navegacion.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
+"""
     def publicar_marcadores_rviz(self, borrar=False):
         marker_array = MarkerArray()
         colores = [[1.0,1.0,0.0,0.8], [1.0,0.0,0.0,0.8], [0.0,1.0,0.0,0.8]]
@@ -315,19 +334,4 @@ class NodoNavegacion(Node):
         
         self.pub_marcadores.publish(marker_array)
 
-
-def main(args=None):
-    rclpy.init(args=args)
-    nodo_navegacion = NodoNavegacion()
-    try:
-        rclpy.spin(nodo_navegacion)
-    except KeyboardInterrupt:
-        nodo_navegacion.get_logger().info("Ctrl+C")
-    finally:
-        nodo_navegacion.detener_dron()
-        nodo_navegacion.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
-
-if __name__ == '__main__':
-    main()
+"""
