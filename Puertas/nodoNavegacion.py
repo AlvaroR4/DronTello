@@ -43,12 +43,14 @@ class NodoNavegacion(Node):
         self.primera_puerta = True
         self.puertas_pendientes = []  # {'punto': np.array, 'angulo': float, 'n_muestras': int}
         self.puertas_visitadas = []   # Lista de puntos (np.array) de puertas ya cruzadas
+        self.todas_las_puertas = [] #para visualzar
         self.minimo_una_cruzada = False 
         self.indice_objetivo_actual = -1
 
         self.sub_pose = self.create_subscription(Float32MultiArray, '/tello/pose_corregida', self.callback_pose_dron, 10)
         self.sub_puerta = self.create_subscription(Float32MultiArray, '/tello/punto_y_angulo', self.callback_nueva_puerta, 10)
         self.pub_velocidad = self.create_publisher(Float32MultiArray, '/tello/comandos_velocidad', 10)
+        self.pub_lista_puertas= self.create_publisher(Float32MultiArray, '/tello/lista_puertas', 10)
 
         qos_marcadores = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -160,9 +162,12 @@ class NodoNavegacion(Node):
                 'n_muestras': 1
             }
             self.puertas_pendientes.append(nueva_puerta)
+            self.todas_las_puertas.append(nueva_puerta)
             self.get_logger().info(f"Nueva puerta añadida a cola. Total pendientes: {len(self.puertas_pendientes)}")
 
     def bucle_de_control(self):
+        self.publicar_datos_puertas()
+
         if not self.pose_recibida:
             self.detener_dron()
             return
@@ -289,6 +294,31 @@ class NodoNavegacion(Node):
 
     def detener_dron(self):
         self.enviar_comando_velocidad(0, 0, 0, 0)
+    
+    def publicar_datos_puertas(self):
+        msg = Float32MultiArray()
+        lista_datos = []
+        
+        for puerta in self.todas_las_puertas:
+            centro = puerta['punto']
+            angulo = puerta['angulo']
+            
+            rad = math.radians(angulo)
+            normal = np.array([math.cos(rad), math.sin(rad), 0.0])
+            
+            p1 = centro - DISTANCIA_APROXIMACION_M * normal
+            p2 = centro - (DISTANCIA_APROXIMACION_M / 2.0) * normal
+            p3 = centro + (DISTANCIA_SALIDA_M / 2.0) * normal
+            p4 = centro + DISTANCIA_SALIDA_M * normal
+            
+            puntos_interes = [p1, p2, p3, p4, centro]
+            for p in puntos_interes:
+                lista_datos.extend([float(p[0]), float(p[1]), float(p[2])])
+            
+            lista_datos.append(float(angulo))
+
+        msg.data = lista_datos
+        self.pub_lista_puertas.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)
