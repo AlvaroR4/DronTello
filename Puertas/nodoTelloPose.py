@@ -64,7 +64,7 @@ class Tello(Node):
         self.suscriptor_comandos_velocidad = self.create_subscription(Float32MultiArray,TOPIC_COMANDOS_VELOCIDAD, self.comandos_velocidad, qos_profile_cmd)
         #TOPICS PARA PUBLICAR
         self.publicador_pose = self.create_publisher(Float32MultiArray, TOPIC_POSE, qos_profile_pose)
-        self.timer_pose = self.create_timer(0.1, self.publicar_pose)
+        self.timer_pose = self.create_timer(0.03, self.publicar_pose)
 
         #SUSCRIPTORES PARA LEER DE LOS EVENTOS
         self.ultimo_flight = None #datos del vuelo
