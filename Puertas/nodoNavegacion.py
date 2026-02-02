@@ -1,7 +1,3 @@
-#a P1 ponerle un radio de error mucho mayor y que llegue a P1 ya rotado y orientado
-#hacer pruebas y reducir la velocidad entre puntos al pasar la puerta
-#si es necesario no dejarle que corijja lateral al cruzar la puerta
-#Lookahead
 import math
 import numpy as np
 import rclpy
@@ -10,14 +6,14 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-DISTANCIA_APROXIMACION_M = 1.2
-DISTANCIA_SALIDA_M = 1.0
+DISTANCIA_APROXIMACION_M = 0.8
+DISTANCIA_SALIDA_M = 0.8
 MARGEN_ALTURA_M = 0.0
-AUMENTAR_YAW = 8.0
-VELOCIDAD_MAXIMA = 20
-VELOCIDAD_MINIMA = 16
-VELOCIDAD_MAXIMA_YAW = 12.0
-ERROR_POS_MIN = 0.16
+AUMENTAR_YAW = 4.0
+VELOCIDAD_MAXIMA = 40
+VELOCIDAD_MINIMA = 20
+VELOCIDAD_MAXIMA_YAW = 10.0
+ERROR_POS_MIN = 0.12
 ERROR_POS_MAX = 1.3 
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
@@ -180,19 +176,19 @@ class NodoNavegacion(Node):
 
         if self.estado_mision == 'IR_A_P1':
             objetivo = self.puntos_trayectoria_actual[0]
-            if self.ir_a_posicion(objetivo, despacio = False):
+            if self.ir_a_posicion(objetivo, despacio = False, yaw = True):
                 self.get_logger().info(f"P1 alcanzado")
                 self.estado_mision = 'IR_A_P2'
         
         if self.estado_mision == 'IR_A_P2':
             objetivo = self.puntos_trayectoria_actual[1]
-            if self.ir_a_posicion(objetivo, despacio = True):
+            if self.ir_a_posicion(objetivo, despacio = True, yaw = False):
                 self.get_logger().info(f"P2 alcanzado")
                 self.estado_mision = 'IR_A_P3'
 
         if self.estado_mision == 'IR_A_P3':
             objetivo = self.puntos_trayectoria_actual[2]
-            if self.ir_a_posicion(objetivo, despacio = True):
+            if self.ir_a_posicion(objetivo, despacio = True, yaw = False):
                 self.get_logger().info(f"P3 alcanzado")
                 self.estado_mision = 'IR_A_P4'
 
@@ -204,7 +200,7 @@ class NodoNavegacion(Node):
         elif self.estado_mision == 'IR_A_P4':
             objetivo = self.puntos_trayectoria_actual[3]
             
-            if self.ir_a_posicion(objetivo, despacio = True):
+            if self.ir_a_posicion(objetivo, despacio = True, yaw = False):
                 self.get_logger().info("--- PUERTA CRUZADA ---")
                 
                 if 0 <= self.indice_objetivo_actual < len(self.puertas_pendientes):
@@ -237,32 +233,38 @@ class NodoNavegacion(Node):
         pendiente = (out_max - out_min) / (in_max - in_min)
         return out_min + (valor - in_min) * pendiente
     
-    def ir_a_posicion(self, punto_objetivo, despacio, yaw_objetivo_deg=None):
+    def ir_a_posicion(self, punto_objetivo, despacio, yaw):
         error_posicion = punto_objetivo - self.posicion_dron_mundo
         magnitud_error = np.linalg.norm(error_posicion)
+        error_min = ERROR_POS_MIN
+        if not despacio:
+            error_min = error_min *1.5
 
-        if magnitud_error < ERROR_POS_MIN:
+        if magnitud_error < error_min:
             return True
 
         avance_norm = error_posicion[0] / magnitud_error
         lateral_norm = error_posicion[1] / magnitud_error
         vertical_norm = error_posicion[2] / magnitud_error
         if despacio:
-            velocidad_magnitud = self.mapear_valor(magnitud_error, ERROR_POS_MIN, ERROR_POS_MAX, VELOCIDAD_MINIMA, VELOCIDAD_MINIMA)
+            velocidad_magnitud = self.mapear_valor(magnitud_error, error_min, ERROR_POS_MAX, VELOCIDAD_MINIMA/2, VELOCIDAD_MAXIMA/2)
         else: 
-            velocidad_magnitud = self.mapear_valor(magnitud_error, ERROR_POS_MIN, ERROR_POS_MAX, VELOCIDAD_MINIMA/2, VELOCIDAD_MAXIMA)
+            velocidad_magnitud = self.mapear_valor(magnitud_error, error_min, ERROR_POS_MAX, VELOCIDAD_MINIMA/2, VELOCIDAD_MAXIMA)
 
         vx = avance_norm * velocidad_magnitud
-        vy = lateral_norm * velocidad_magnitud
+        vy = lateral_norm * velocidad_magnitud 
         vz = vertical_norm * velocidad_magnitud
-
+        if vx < abs(4.0):
+            vx = 0.0
+            vy = vy * 2
         rotacion = 0
-        if yaw_objetivo_deg is not None:
-            rotacion = normalizar_angulo_deg(yaw_objetivo_deg - self.yaw_dron_deg)
-            rotacion = np.clip(rotacion * AUMENTAR_YAW, -VELOCIDAD_MAXIMA_YAW, VELOCIDAD_MAXIMA_YAW)
-            if 0 < abs(rotacion) < VELOCIDAD_MINIMA:
-                rotacion = VELOCIDAD_MINIMA * (1 if rotacion > 0 else -1)
-        
+        if yaw:
+            rotacion = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
+            if abs(rotacion) < ERROR_YAW_DEG:
+                rotacion = 0
+            else:
+                rotacion = rango_velocidad(AUMENTAR_YAW * rotacion, VELOCIDAD_MAXIMA_YAW)
+
         # Fórmula de rotación de vectores 2D:
         # V_fb = V_x_mundo * cos(yaw) + V_y_mundo * sin(yaw)
         # V_lr = -V_x_mundo * sin(yaw) + V_y_mundo * cos(yaw)
@@ -335,33 +337,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
-"""
-    def publicar_marcadores_rviz(self, borrar=False):
-        marker_array = MarkerArray()
-        colores = [[1.0,1.0,0.0,0.8], [1.0,0.0,0.0,0.8], [0.0,1.0,0.0,0.8]]
-
-        for i, punto in enumerate(self.puntos_trayectoria_actual):
-            marker = Marker()
-            marker.header.frame_id = "map"
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.ns = "puntos_trayectoria"
-            marker.id = i
-            marker.type = Marker.SPHERE
-            marker.action = Marker.DELETE if borrar else Marker.ADD
-            
-            marker.pose.position.x = float(punto[0])
-            marker.pose.position.y = float(punto[1])
-            marker.pose.position.z = float(punto[2])
-            marker.pose.orientation.w = 1.0
-            marker.scale.x, marker.scale.y, marker.scale.z = 0.1, 0.1, 0.1
-            
-            if not borrar:
-                marker.color.r, marker.color.g, marker.color.b, marker.color.a = colores[i]
-
-            marker.lifetime = rclpy.duration.Duration(seconds=0).to_msg()
-            marker_array.markers.append(marker)
-        
-        self.pub_marcadores.publish(marker_array)
-
-"""

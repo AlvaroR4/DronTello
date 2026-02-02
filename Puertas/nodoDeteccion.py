@@ -22,7 +22,7 @@ MIN_CORNER_AREA = 10
 
 ALTO_REAL = 0.7
 ANCHO_REAL = 0.5
-FOCAL = 920.0 #tello
+FOCAL = 900.0 #tello
 #FOCAL = 617.0 #webots
 
 class NodoDeteccion(Node):
