@@ -18,6 +18,11 @@ ERROR_POS_MAX = 1.3
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
 
+KP = 1.0
+KI = 1.6
+KD = 0.5
+MAX_INTEGRAL = 20.0
+
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
 
@@ -42,6 +47,10 @@ class NodoNavegacion(Node):
         self.todas_las_puertas = [] #para visualzar
         self.minimo_una_cruzada = False 
         self.indice_objetivo_actual = -1
+
+        self.error_integral = np.zeros(3)
+        self.error_previo = np.zeros(3)
+        self.tiempo_dt = 1.0 / 20.0
 
         self.sub_pose = self.create_subscription(Float32MultiArray, '/tello/pose_corregida', self.callback_pose_dron, 10)
         self.sub_puerta = self.create_subscription(Float32MultiArray, '/tello/punto_y_angulo', self.callback_nueva_puerta, 10)
@@ -112,14 +121,15 @@ class NodoNavegacion(Node):
             rad = math.radians(angulo_obj)
             normal = np.array([math.cos(rad), math.sin(rad), 0.0])
             
+            p0 = punto_central - DISTANCIA_APROXIMACION_M * 1.5 * normal
             p1 = punto_central - DISTANCIA_APROXIMACION_M * normal
             p2 = punto_central - DISTANCIA_APROXIMACION_M/2 * normal
             p3 = punto_central + DISTANCIA_SALIDA_M/2 * normal
             p4 = punto_central + DISTANCIA_SALIDA_M * normal
             
-            self.puntos_trayectoria_actual = [p1, p2, p3, p4]
+            self.puntos_trayectoria_actual = [p0, p1, p2, p3, p4]
             
-            self.estado_mision = 'IR_A_P1'
+            self.estado_mision = 'IR_A_P0'
             self.mision_en_curso = True
             dist = np.linalg.norm(target['punto'] - self.posicion_dron_mundo)
             self.get_logger().info(f"Navegando a puerta a {dist:.2f}m. Ángulo entrada: {angulo_obj:.1f}º")
@@ -173,32 +183,43 @@ class NodoNavegacion(Node):
             if not self.mision_en_curso:
                 self.detener_dron()
             return
-
-        if self.estado_mision == 'IR_A_P1':
+        
+        if self.estado_mision == 'IR_A_P0':
             objetivo = self.puntos_trayectoria_actual[0]
             if self.ir_a_posicion(objetivo, despacio = False, yaw = True):
+                self.get_logger().info(f"P0 alcanzado")
+                self.resetear_pid()
+                self.estado_mision = 'IR_A_P1'
+
+        if self.estado_mision == 'IR_A_P1':
+            objetivo = self.puntos_trayectoria_actual[1]
+            if self.ir_a_posicion(objetivo, despacio = False, yaw = True):
                 self.get_logger().info(f"P1 alcanzado")
+                self.resetear_pid()
                 self.estado_mision = 'IR_A_P2'
         
         if self.estado_mision == 'IR_A_P2':
-            objetivo = self.puntos_trayectoria_actual[1]
+            objetivo = self.puntos_trayectoria_actual[2]
             if self.ir_a_posicion(objetivo, despacio = True, yaw = False):
                 self.get_logger().info(f"P2 alcanzado")
+                self.resetear_pid()
                 self.estado_mision = 'IR_A_P3'
 
         if self.estado_mision == 'IR_A_P3':
-            objetivo = self.puntos_trayectoria_actual[2]
+            objetivo = self.puntos_trayectoria_actual[3]
             if self.ir_a_posicion(objetivo, despacio = True, yaw = False):
                 self.get_logger().info(f"P3 alcanzado")
+                self.resetear_pid()
                 self.estado_mision = 'IR_A_P4'
 
         elif self.estado_mision == 'ROTAR_HACIA_PUERTA':
             if self.rotar_a_yaw():
                 self.get_logger().info("Alineado. Cruzando hacia punto de salida...")
+                self.resetear_pid()
                 self.estado_mision = 'IR_A_P2'
 
         elif self.estado_mision == 'IR_A_P4':
-            objetivo = self.puntos_trayectoria_actual[3]
+            objetivo = self.puntos_trayectoria_actual[4]
             
             if self.ir_a_posicion(objetivo, despacio = True, yaw = False):
                 self.get_logger().info("--- PUERTA CRUZADA ---")
@@ -213,6 +234,7 @@ class NodoNavegacion(Node):
                     self.get_logger().info(f"Quedan {len(self.puertas_pendientes)} puertas pendientes")
                     self.indice_objetivo_actual = -1
                     self.mision_en_curso = False
+                    self.resetear_pid()
                     self.estado_mision = 'ESPERANDO_PUERTA'
                     
                 else:
@@ -236,44 +258,65 @@ class NodoNavegacion(Node):
     def ir_a_posicion(self, punto_objetivo, despacio, yaw):
         error_posicion = punto_objetivo - self.posicion_dron_mundo
         magnitud_error = np.linalg.norm(error_posicion)
+        
         error_min = ERROR_POS_MIN
-        if not despacio:
-            error_min = error_min *1.5
+        if self.estado_mision == 'IR_A_P0':
+            error_min = ERROR_POS_MIN * 4
+        elif self.estado_mision == 'IR_A_P1':
+            error_min = ERROR_POS_MIN * 2
 
         if magnitud_error < error_min:
             return True
 
-        avance_norm = error_posicion[0] / magnitud_error
-        lateral_norm = error_posicion[1] / magnitud_error
-        vertical_norm = error_posicion[2] / magnitud_error
         if despacio:
-            velocidad_magnitud = self.mapear_valor(magnitud_error, error_min, ERROR_POS_MAX, VELOCIDAD_MINIMA/2, VELOCIDAD_MAXIMA/2)
-        else: 
-            velocidad_magnitud = self.mapear_valor(magnitud_error, error_min, ERROR_POS_MAX, VELOCIDAD_MINIMA/2, VELOCIDAD_MAXIMA)
+            velocidad_base_escalar = self.mapear_valor(magnitud_error, 0, ERROR_POS_MAX, 0, VELOCIDAD_MAXIMA)
+        else:
+            velocidad_base_escalar = self.mapear_valor(magnitud_error, 0, ERROR_POS_MAX, 0, VELOCIDAD_MAXIMA)
+        
+        if magnitud_error > 0.001:
+            vector_base = (error_posicion / magnitud_error) * velocidad_base_escalar
+            P_vector = vector_base * KP
+        else:
+            P_vector = np.zeros(3)
 
-        vx = avance_norm * velocidad_magnitud
-        vy = lateral_norm * velocidad_magnitud 
-        vz = vertical_norm * velocidad_magnitud
-        if vx < abs(4.0):
-            vx = 0.0
-            vy = vy * 2
+        
+        self.error_integral += error_posicion * self.tiempo_dt
+        self.error_integral = np.clip(self.error_integral, -MAX_INTEGRAL, MAX_INTEGRAL)
+        I_vector = KI * self.error_integral
+        
+        derivada = (error_posicion - self.error_previo) / self.tiempo_dt
+        D_vector = KD * derivada
+        
+        self.error_previo = error_posicion
+        
+        velocidad_mundo = P_vector + I_vector + D_vector
+
+        norm_vel = np.linalg.norm(velocidad_mundo)
+        
+        if norm_vel > VELOCIDAD_MAXIMA:
+            velocidad_mundo = (velocidad_mundo / norm_vel) * VELOCIDAD_MAXIMA
+
         rotacion = 0
         if yaw:
-            rotacion = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
-            if abs(rotacion) < ERROR_YAW_DEG:
+            diff_yaw = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
+            if abs(diff_yaw) < ERROR_YAW_DEG:
                 rotacion = 0
             else:
-                rotacion = rango_velocidad(AUMENTAR_YAW * rotacion, VELOCIDAD_MAXIMA_YAW)
+                rotacion = rango_velocidad(AUMENTAR_YAW * diff_yaw, VELOCIDAD_MAXIMA_YAW)
+
+        vx_mundo = velocidad_mundo[0]
+        vy_mundo = velocidad_mundo[1]
+        vz_mundo = velocidad_mundo[2]
+        
+        yaw_rad = math.radians(self.yaw_dron_deg)
 
         # Fórmula de rotación de vectores 2D:
         # V_fb = V_x_mundo * cos(yaw) + V_y_mundo * sin(yaw)
-        # V_lr = -V_x_mundo * sin(yaw) + V_y_mundo * cos(yaw)
-
-        yaw_rad = math.radians(self.yaw_dron_deg)
-        avance_cuerpo = vx * math.cos(yaw_rad) + vy * math.sin(yaw_rad)
-        lateral_cuerpo = -vx * math.sin(yaw_rad) + vy * math.cos(yaw_rad)
+        # V_lr = -V_x_mundo * sin(yaw) + V_y_mundo * cos(yaw)       
+        avance_cuerpo = vx_mundo * math.cos(yaw_rad) + vy_mundo * math.sin(yaw_rad)
+        lateral_cuerpo = -vx_mundo * math.sin(yaw_rad) + vy_mundo * math.cos(yaw_rad)
         
-        self.enviar_comando_velocidad(lateral_cuerpo, avance_cuerpo, vz, rotacion)
+        self.enviar_comando_velocidad(lateral_cuerpo, avance_cuerpo, vz_mundo, rotacion)
         
         return False
     
@@ -294,6 +337,10 @@ class NodoNavegacion(Node):
         #msg = Float32MultiArray(data=[0,0,0,0])
         self.pub_velocidad.publish(msg)
 
+    def resetear_pid(self):
+        self.error_integral = np.zeros(3)
+        self.error_previo = np.zeros(3)
+
     def detener_dron(self):
         self.enviar_comando_velocidad(0, 0, 0, 0)
     
@@ -308,12 +355,13 @@ class NodoNavegacion(Node):
             rad = math.radians(angulo)
             normal = np.array([math.cos(rad), math.sin(rad), 0.0])
             
+            p0 = centro - DISTANCIA_APROXIMACION_M * 1.5 * normal
             p1 = centro - DISTANCIA_APROXIMACION_M * normal
             p2 = centro - (DISTANCIA_APROXIMACION_M / 2.0) * normal
             p3 = centro + (DISTANCIA_SALIDA_M / 2.0) * normal
             p4 = centro + DISTANCIA_SALIDA_M * normal
             
-            puntos_interes = [p1, p2, p3, p4, centro]
+            puntos_interes = [p0, p1, p2, p3, p4, centro]
             for p in puntos_interes:
                 lista_datos.extend([float(p[0]), float(p[1]), float(p[2])])
             

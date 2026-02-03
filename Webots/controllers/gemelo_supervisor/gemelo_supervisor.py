@@ -45,7 +45,7 @@ class PuenteGemelo(Node):
         elif len(datos) >= 6: yaw_grados = datos[5]
 
         self.pose_dron = [float(x), float(y), float(z)]
-        self.rot_dron = [0.0, 0.0, 1.0, math.radians(yaw_grados)]
+        self.rot_dron = [0.0, 0.0, 1.0, math.radians(yaw_grados - 0,785398)]
 
     def callback_puertas(self, msg):
         datos = msg.data
@@ -54,7 +54,7 @@ class PuenteGemelo(Node):
             p1_x, p1_y, p1_z = datos[12], datos[13], datos[14]
             p1_yaw = datos[15]
             
-            z_corregida = float(p1_z) - 1.0
+            z_corregida = float(p1_z) - 0.58
             
             self.pose_puerta1 = [float(p1_x), float(p1_y), z_corregida]
             self.rot_puerta1 = [0.0, 0.0, 1.0, math.radians(p1_yaw)]
