@@ -13,15 +13,15 @@ AUMENTAR_YAW = 4.0
 VELOCIDAD_MAXIMA = 40
 VELOCIDAD_MINIMA = 20
 VELOCIDAD_MAXIMA_YAW = 10.0
-ERROR_POS_MIN = 0.12
+ERROR_POS_MIN = 0.06
 ERROR_POS_MAX = 1.3 
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
 
 KP = 1.0
-KI = 1.6
-KD = 0.5
-MAX_INTEGRAL = 20.0
+KI = 4.0
+KD = 0.0
+MAX_INTEGRAL = 30.0
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -186,28 +186,28 @@ class NodoNavegacion(Node):
         
         if self.estado_mision == 'IR_A_P0':
             objetivo = self.puntos_trayectoria_actual[0]
-            if self.ir_a_posicion(objetivo, despacio = False, yaw = True):
+            if self.ir_a_posicion(objetivo, yaw = True):
                 self.get_logger().info(f"P0 alcanzado")
                 self.resetear_pid()
                 self.estado_mision = 'IR_A_P1'
 
         if self.estado_mision == 'IR_A_P1':
             objetivo = self.puntos_trayectoria_actual[1]
-            if self.ir_a_posicion(objetivo, despacio = False, yaw = True):
+            if self.ir_a_posicion(objetivo, yaw = True):
                 self.get_logger().info(f"P1 alcanzado")
                 self.resetear_pid()
                 self.estado_mision = 'IR_A_P2'
         
         if self.estado_mision == 'IR_A_P2':
             objetivo = self.puntos_trayectoria_actual[2]
-            if self.ir_a_posicion(objetivo, despacio = True, yaw = False):
+            if self.ir_a_posicion(objetivo, yaw = False):
                 self.get_logger().info(f"P2 alcanzado")
                 self.resetear_pid()
                 self.estado_mision = 'IR_A_P3'
 
         if self.estado_mision == 'IR_A_P3':
             objetivo = self.puntos_trayectoria_actual[3]
-            if self.ir_a_posicion(objetivo, despacio = True, yaw = False):
+            if self.ir_a_posicion(objetivo, yaw = False):
                 self.get_logger().info(f"P3 alcanzado")
                 self.resetear_pid()
                 self.estado_mision = 'IR_A_P4'
@@ -221,7 +221,7 @@ class NodoNavegacion(Node):
         elif self.estado_mision == 'IR_A_P4':
             objetivo = self.puntos_trayectoria_actual[4]
             
-            if self.ir_a_posicion(objetivo, despacio = True, yaw = False):
+            if self.ir_a_posicion(objetivo, yaw = False):
                 self.get_logger().info("--- PUERTA CRUZADA ---")
                 
                 if 0 <= self.indice_objetivo_actual < len(self.puertas_pendientes):
@@ -255,23 +255,20 @@ class NodoNavegacion(Node):
         pendiente = (out_max - out_min) / (in_max - in_min)
         return out_min + (valor - in_min) * pendiente
     
-    def ir_a_posicion(self, punto_objetivo, despacio, yaw):
+    def ir_a_posicion(self, punto_objetivo, yaw):
         error_posicion = punto_objetivo - self.posicion_dron_mundo
         magnitud_error = np.linalg.norm(error_posicion)
         
         error_min = ERROR_POS_MIN
         if self.estado_mision == 'IR_A_P0':
-            error_min = ERROR_POS_MIN * 4
-        elif self.estado_mision == 'IR_A_P1':
             error_min = ERROR_POS_MIN * 2
+        elif self.estado_mision == 'IR_A_P1':
+            error_min = ERROR_POS_MIN * 1.2
 
         if magnitud_error < error_min:
             return True
 
-        if despacio:
-            velocidad_base_escalar = self.mapear_valor(magnitud_error, 0, ERROR_POS_MAX, 0, VELOCIDAD_MAXIMA)
-        else:
-            velocidad_base_escalar = self.mapear_valor(magnitud_error, 0, ERROR_POS_MAX, 0, VELOCIDAD_MAXIMA)
+        velocidad_base_escalar = self.mapear_valor(magnitud_error, 0, ERROR_POS_MAX, 0, VELOCIDAD_MAXIMA)
         
         if magnitud_error > 0.001:
             vector_base = (error_posicion / magnitud_error) * velocidad_base_escalar
