@@ -14,7 +14,7 @@ WorldInfo {
 }
 Viewpoint {
   orientation -0.0873213665796333 -0.882383248317829 0.4623578506165347 5.861507286738761
-  position -13.098251549354986 1.3947528401030016 5.994169697671113
+  position -15.951019815474327 1.4329282431377115 7.164276008648685
 }
 TexturedBackground {
 }
@@ -23,7 +23,7 @@ TexturedBackgroundLight {
 RectangleArena {
   floorSize 15 15
 }
-Mavic2Pro {
+DEF Mavic_2_PRO Mavic2Pro {
   translation 0 0 0.1
   name "Mavic_2_PRO"
   controller "<extern>"
@@ -219,7 +219,7 @@ DEF PuertaA1 Solid {
   }
 }
 DEF PuertaA2 Solid {
-  translation 4.3 -1.5 0
+  translation -3.4 -1.5 0
   rotation 0 0 1 -2.094399693899575
   children [
     DEF Aruco1 Pose {

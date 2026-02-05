@@ -19,8 +19,10 @@ ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
 
 KP = 1.0
-KI = 4.0
+KI = 0.15
 KD = 0.0
+KL = 4.0
+KML = 0.5
 MAX_INTEGRAL = 30.0
 
 def rango_velocidad(valor, maximo):
@@ -256,7 +258,7 @@ class NodoNavegacion(Node):
         return out_min + (valor - in_min) * pendiente
     
     def ir_a_posicion(self, punto_objetivo, yaw):
-        error_posicion = punto_objetivo - self.posicion_dron_mundo
+        error_posicion = self.calcular_error_trayectoria(punto_objetivo)
         magnitud_error = np.linalg.norm(error_posicion)
         
         error_min = ERROR_POS_MIN
@@ -316,6 +318,47 @@ class NodoNavegacion(Node):
         self.enviar_comando_velocidad(lateral_cuerpo, avance_cuerpo, vz_mundo, rotacion)
         
         return False
+    
+    def calcular_error_trayectoria(self, punto_objetivo):
+        p_inicio = None
+        if self.estado_mision == 'IR_A_P1':
+            p_inicio = self.puntos_trayectoria_actual[0] 
+        elif self.estado_mision == 'IR_A_P2':
+            p_inicio = self.puntos_trayectoria_actual[1] 
+        elif self.estado_mision == 'IR_A_P3':
+            p_inicio = self.puntos_trayectoria_actual[2] 
+        elif self.estado_mision == 'IR_A_P4':
+            p_inicio = self.puntos_trayectoria_actual[3] 
+        
+        error_real = punto_objetivo - self.posicion_dron_mundo
+        
+        if p_inicio is None:
+            return error_real
+
+        v_ruta = punto_objetivo - p_inicio
+        len_ruta = np.linalg.norm(v_ruta)
+        
+        if len_ruta < 0.01:
+            return error_real
+
+        u_ruta = v_ruta / len_ruta
+        v_dron = self.posicion_dron_mundo - p_inicio
+        
+        proyeccion = np.dot(v_dron, u_ruta)
+        proyeccion_clamped = np.clip(proyeccion, 0, len_ruta)
+        
+        p_ideal = p_inicio + (proyeccion_clamped * u_ruta)
+        
+        e_lateral = p_ideal - self.posicion_dron_mundo 
+        e_avance = punto_objetivo - p_ideal            
+        
+        dist_lat = np.linalg.norm(e_lateral)
+        
+        factor_penalizacion = dist_lat / KML
+        k_avance = 1.0 - factor_penalizacion
+        k_avance = np.clip(k_avance, 0.1, 1.0) 
+        
+        return (e_lateral * KL) + (e_avance * k_avance)
     
     def rotar_a_yaw(self):
         error_yaw = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
