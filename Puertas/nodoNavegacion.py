@@ -9,21 +9,20 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 DISTANCIA_APROXIMACION_M = 0.8
 DISTANCIA_SALIDA_M = 0.8
 MARGEN_ALTURA_M = 0.0
-AUMENTAR_YAW = 4.0
+AUMENTAR_YAW = 2.0
 VELOCIDAD_MAXIMA = 40
-VELOCIDAD_MINIMA = 20
 VELOCIDAD_MAXIMA_YAW = 10.0
-ERROR_POS_MIN = 0.06
-ERROR_POS_MAX = 1.3 
+ERROR_POS_MIN = 0.12
+ERROR_POS_MAX = 2.5
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
 
-KP = 1.0
-KI = 0.15
-KD = 0.0
-KL = 4.0
-KML = 0.5
-MAX_INTEGRAL = 30.0
+KP = 1.2
+KI = 3.2
+KD = 0.5
+KL = 5.5
+KML = 0.5 #en funcion de esta se calcula Ka
+MAX_INTEGRAL = 15.0
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -52,6 +51,7 @@ class NodoNavegacion(Node):
 
         self.error_integral = np.zeros(3)
         self.error_previo = np.zeros(3)
+        self.punto_inicio_mision = np.zeros(3)
         self.tiempo_dt = 1.0 / 20.0
 
         self.sub_pose = self.create_subscription(Float32MultiArray, '/tello/pose_corregida', self.callback_pose_dron, 10)
@@ -123,14 +123,15 @@ class NodoNavegacion(Node):
             rad = math.radians(angulo_obj)
             normal = np.array([math.cos(rad), math.sin(rad), 0.0])
             
-            p0 = punto_central - DISTANCIA_APROXIMACION_M * 1.5 * normal
-            p1 = punto_central - DISTANCIA_APROXIMACION_M * normal
-            p2 = punto_central - DISTANCIA_APROXIMACION_M/2 * normal
-            p3 = punto_central + DISTANCIA_SALIDA_M/2 * normal
-            p4 = punto_central + DISTANCIA_SALIDA_M * normal
+            p0 = punto_central - DISTANCIA_APROXIMACION_M * 1.7 * normal
+            p1 = punto_central - DISTANCIA_APROXIMACION_M * 1.1 * normal
+            p2 = punto_central - DISTANCIA_APROXIMACION_M/1.8 * normal
+            p3 = punto_central + 0.1 * normal
+            p4 = punto_central + DISTANCIA_SALIDA_M * 1.1 * normal
             
             self.puntos_trayectoria_actual = [p0, p1, p2, p3, p4]
-            
+            self.punto_inicio_mision = self.posicion_dron_mundo.copy()
+            self.get_logger().info(f"Raíl P0 fijado. Inicio: {self.punto_inicio_mision} -> Destino P0: {p0}")
             self.estado_mision = 'IR_A_P0'
             self.mision_en_curso = True
             dist = np.linalg.norm(target['punto'] - self.posicion_dron_mundo)
@@ -188,6 +189,8 @@ class NodoNavegacion(Node):
         
         if self.estado_mision == 'IR_A_P0':
             objetivo = self.puntos_trayectoria_actual[0]
+            if np.linalg.norm(self.error_previo) == 0:
+                 self.error_previo = self.calcular_error_trayectoria(objetivo)
             if self.ir_a_posicion(objetivo, yaw = True):
                 self.get_logger().info(f"P0 alcanzado")
                 self.resetear_pid()
@@ -321,7 +324,9 @@ class NodoNavegacion(Node):
     
     def calcular_error_trayectoria(self, punto_objetivo):
         p_inicio = None
-        if self.estado_mision == 'IR_A_P1':
+        if self.estado_mision == 'IR_A_P0':
+            p_inicio = self.punto_inicio_mision
+        elif self.estado_mision == 'IR_A_P1':
             p_inicio = self.puntos_trayectoria_actual[0] 
         elif self.estado_mision == 'IR_A_P2':
             p_inicio = self.puntos_trayectoria_actual[1] 
@@ -395,11 +400,11 @@ class NodoNavegacion(Node):
             rad = math.radians(angulo)
             normal = np.array([math.cos(rad), math.sin(rad), 0.0])
             
-            p0 = centro - DISTANCIA_APROXIMACION_M * 1.5 * normal
-            p1 = centro - DISTANCIA_APROXIMACION_M * normal
-            p2 = centro - (DISTANCIA_APROXIMACION_M / 2.0) * normal
-            p3 = centro + (DISTANCIA_SALIDA_M / 2.0) * normal
-            p4 = centro + DISTANCIA_SALIDA_M * normal
+            p0 = centro - DISTANCIA_APROXIMACION_M * 1.7 * normal
+            p1 = centro - DISTANCIA_APROXIMACION_M * 1.1 * normal
+            p2 = centro - (DISTANCIA_APROXIMACION_M / 1.8) * normal
+            p3 = centro + 0.1 * normal
+            p4 = centro + DISTANCIA_SALIDA_M * 1.1 *normal
             
             puntos_interes = [p0, p1, p2, p3, p4, centro]
             for p in puntos_interes:

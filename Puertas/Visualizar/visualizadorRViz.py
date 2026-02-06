@@ -2,9 +2,13 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
+from geometry_msgs.msg import Point
 import math
 import numpy as np
 
+ALTURA_DESPEGUE = 0.72
+ANCHO_PUERTA = 0.5
+ALTO_PUERTA = 0.7
 class VisualizadorPuertas(Node):
     def __init__(self):
         super().__init__('visualizador_puertas')
@@ -27,11 +31,10 @@ class VisualizadorPuertas(Node):
         self.pose_dron = None # [x, y, z, yaw]
         self.datos_puertas = [] 
         
-        self.ancho_puerta = 0.7
-        self.alto_puerta = 0.5
+        self.estado_progreso = {} 
 
         self.timer = self.create_timer(0.1, self.bucle_visualizacion)
-        self.get_logger().info("Visualizador de Puertas iniciado.")
+        self.get_logger().info("Visualizador RViz (Con Vector Inicio) iniciado.")
 
     def callback_pose(self, msg):
         if len(msg.data) >= 6: 
@@ -45,12 +48,18 @@ class VisualizadorPuertas(Node):
         sy = math.sin(yaw * 0.5)
         return [0.0, 0.0, sy, cy]
 
+    def calcular_distancia(self, p_dron, p_objetivo):
+        return math.sqrt(
+            (p_dron[0] - p_objetivo[0])**2 + 
+            (p_dron[1] - p_objetivo[1])**2 + 
+            (p_dron[2] - p_objetivo[2])**2
+        )
+
     def bucle_visualizacion(self):
         marker_array = MarkerArray()
         timestamp = self.get_clock().now().to_msg()
         id_counter = 0
 
-        # --- 1. DIBUJAR EL DRON ---
         if self.pose_dron:
             m_dron = Marker()
             m_dron.header.frame_id = "map"
@@ -66,39 +75,40 @@ class VisualizadorPuertas(Node):
             m_dron.pose.position.z = float(self.pose_dron[2])
             
             q = self.euler_a_quaternion(math.radians(self.pose_dron[3]))
-            m_dron.pose.orientation.x = q[0]
-            m_dron.pose.orientation.y = q[1]
-            m_dron.pose.orientation.z = q[2]
-            m_dron.pose.orientation.w = q[3]
+            m_dron.pose.orientation.x = q[0]; m_dron.pose.orientation.y = q[1]
+            m_dron.pose.orientation.z = q[2]; m_dron.pose.orientation.w = q[3]
             
             m_dron.scale.x = 0.3; m_dron.scale.y = 0.1; m_dron.scale.z = 0.1
             m_dron.color.r = 1.0; m_dron.color.g = 1.0; m_dron.color.b = 0.0; m_dron.color.a = 1.0
             marker_array.markers.append(m_dron)
 
-        # --- 2. DIBUJAR LAS PUERTAS ---
-        # Estructura del bloque (19 floats):
-        # [P0(3), P1(3), P2(3), P3(3), P4(3), Centro(3), Yaw(1)]
         TAMANO_BLOQUE = 19
         
-        # Validación de seguridad para evitar errores si la lista está incompleta
         if len(self.datos_puertas) > 0:
             num_puertas = len(self.datos_puertas) // TAMANO_BLOQUE
 
             for i in range(num_puertas):
                 base = i * TAMANO_BLOQUE
                 
-                # Extracción de datos
-                p0 = self.datos_puertas[base:base+3]
-                p1 = self.datos_puertas[base+3:base+6]
-                p2 = self.datos_puertas[base+6:base+9]
-                p3 = self.datos_puertas[base+9:base+12]
-                p4 = self.datos_puertas[base+12:base+15]
-                centro = self.datos_puertas[base+15:base+18]
-                
-                # --- CORRECCIÓN AQUÍ: Índice 18 es el elemento 19 ---
-                yaw_deg = self.datos_puertas[base+18] 
+                if i not in self.estado_progreso:
+                    self.estado_progreso[i] = [False, False, False, False, False, False]
 
-                # A. Marco de la Puerta
+                coords_puntos = [self.datos_puertas[base+k:base+k+3] for k in range(0, 15, 3)] 
+                centro = self.datos_puertas[base+15:base+18]
+                yaw_deg = self.datos_puertas[base+18]
+
+                if self.pose_dron:
+                    umbrales = [0.24, 0.144, 0.12, 0.12, 0.12] 
+                    
+                    for idx_pt, coord in enumerate(coords_puntos):
+                        dist = self.calcular_distancia(self.pose_dron, coord)
+                        if dist < umbrales[idx_pt]:
+                            self.estado_progreso[i][idx_pt] = True 
+                    
+                    dist_centro = self.calcular_distancia(self.pose_dron, centro)
+                    if dist_centro < 0.25:
+                        self.estado_progreso[i][5] = True 
+
                 m_puerta = Marker()
                 m_puerta.header.frame_id = "map"
                 m_puerta.header.stamp = timestamp
@@ -113,29 +123,55 @@ class VisualizadorPuertas(Node):
                 m_puerta.pose.position.z = float(centro[2])
                 
                 q_puerta = self.euler_a_quaternion(math.radians(yaw_deg))
-                m_puerta.pose.orientation.x = q_puerta[0]
-                m_puerta.pose.orientation.y = q_puerta[1]
-                m_puerta.pose.orientation.z = q_puerta[2]
-                m_puerta.pose.orientation.w = q_puerta[3]
-
+                m_puerta.pose.orientation.x = q_puerta[0]; m_puerta.pose.orientation.y = q_puerta[1]
+                m_puerta.pose.orientation.z = q_puerta[2]; m_puerta.pose.orientation.w = q_puerta[3]
+                
                 m_puerta.scale.x = 0.05  
-                m_puerta.scale.y = self.ancho_puerta
-                m_puerta.scale.z = self.alto_puerta
+                m_puerta.scale.y = ANCHO_PUERTA 
+                m_puerta.scale.z = ALTO_PUERTA 
 
-                m_puerta.color.r = 0.0; m_puerta.color.g = 0.5; m_puerta.color.b = 1.0; m_puerta.color.a = 0.5 
+                if self.estado_progreso[i][5]: 
+                    m_puerta.color.r = 0.0; m_puerta.color.g = 0.8; m_puerta.color.b = 0.0; m_puerta.color.a = 0.8
+                else:
+                    m_puerta.color.r = 0.0; m_puerta.color.g = 0.5; m_puerta.color.b = 1.0; m_puerta.color.a = 0.4
+                
                 marker_array.markers.append(m_puerta)
 
-                # B. Puntos de Navegación (Ahora incluimos P0)
-                puntos_nav = [p0, p1, p2, p3, p4]
-                colores_puntos = [
-                    (0.5, 0.0, 0.5), # P0 - Violeta (Inicio lejano)
-                    (1.0, 0.0, 0.0), # P1 - Rojo
-                    (1.0, 0.6, 0.0), # P2 - Naranja
-                    (0.5, 1.0, 0.0), # P3 - Verde claro
-                    (0.0, 1.0, 0.0)  # P4 - Verde fuerte
-                ]
+                m_linea = Marker()
+                m_linea.header.frame_id = "map"
+                m_linea.header.stamp = timestamp
+                m_linea.ns = "lineas_trayectoria"
+                m_linea.id = id_counter
+                id_counter += 1
+                m_linea.type = Marker.LINE_STRIP
+                m_linea.action = Marker.ADD
+                m_linea.scale.x = 0.02
+                m_linea.color.r = 1.0; m_linea.color.g = 1.0; m_linea.color.b = 1.0; m_linea.color.a = 0.5
+                
+                if i == 0:
+                    p_inicio = Point()
+                    p_inicio.x = 0.0
+                    p_inicio.y = 0.0
+                    p_inicio.z = float(ALTURA_DESPEGUE) 
+                    m_linea.points.append(p_inicio)
 
-                for j, punto in enumerate(puntos_nav):
+                for coord in coords_puntos:
+                    p = Point()
+                    p.x, p.y, p.z = float(coord[0]), float(coord[1]), float(coord[2])
+                    m_linea.points.append(p)
+                
+                marker_array.markers.append(m_linea)
+
+                colores_pendientes = [
+                    (0.5, 0.0, 0.5), 
+                    (1.0, 0.0, 0.0), 
+                    (1.0, 0.6, 0.0), 
+                    (0.4, 0.4, 0.4), 
+                    (0.6, 0.3, 0.0)
+                ]
+                color_verde_claro = (0.3, 1.0, 0.3) 
+
+                for j, punto in enumerate(coords_puntos):
                     m_pt = Marker()
                     m_pt.header.frame_id = "map"
                     m_pt.header.stamp = timestamp
@@ -148,11 +184,16 @@ class VisualizadorPuertas(Node):
                     m_pt.pose.position.x = float(punto[0])
                     m_pt.pose.position.y = float(punto[1])
                     m_pt.pose.position.z = float(punto[2])
-                    
                     m_pt.scale.x = 0.15; m_pt.scale.y = 0.15; m_pt.scale.z = 0.15
                     
-                    c = colores_puntos[j]
-                    m_pt.color.r = c[0]; m_pt.color.g = c[1]; m_pt.color.b = c[2]; m_pt.color.a = 1.0
+                    if self.estado_progreso[i][j]: 
+                        c = color_verde_claro
+                        m_pt.color.a = 1.0
+                    else:
+                        c = colores_pendientes[j]
+                        m_pt.color.a = 1.0 
+                    
+                    m_pt.color.r = c[0]; m_pt.color.g = c[1]; m_pt.color.b = c[2]
                     marker_array.markers.append(m_pt)
 
         self.pub_markers.publish(marker_array)
