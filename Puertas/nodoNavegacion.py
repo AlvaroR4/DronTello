@@ -20,7 +20,8 @@ DISTANCIA_NUEVA_PUERTA = 1.25
 KP = 1.2
 KI = 3.2
 KD = 0.5
-KL = 5.5
+KL_Y = 5.5
+KL_Z = 1.0
 KML = 0.5 #en funcion de esta se calcula Ka
 MAX_INTEGRAL = 15.0
 
@@ -357,13 +358,21 @@ class NodoNavegacion(Node):
         e_lateral = p_ideal - self.posicion_dron_mundo 
         e_avance = punto_objetivo - p_ideal            
         
-        dist_lat = np.linalg.norm(e_lateral)
+        e_lat_z = e_lateral[2]
+        e_lat_xy = np.array([e_lateral[0], e_lateral[1], 0.0])
+
+        v_correccion_xy = e_lat_xy * KL_Y
+        v_correccion_z = np.array([0.0, 0.0, e_lat_z]) * KL_Z
+
+        e_lateral_ponderado = v_correccion_xy + v_correccion_z
+
+        dist_lat = np.linalg.norm(e_lateral_ponderado)
         
         factor_penalizacion = dist_lat / KML
         k_avance = 1.0 - factor_penalizacion
         k_avance = np.clip(k_avance, 0.1, 1.0) 
         
-        return (e_lateral * KL) + (e_avance * k_avance)
+        return e_lateral_ponderado + (e_avance * k_avance)
     
     def rotar_a_yaw(self):
         error_yaw = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
