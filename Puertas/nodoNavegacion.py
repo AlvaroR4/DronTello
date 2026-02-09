@@ -10,10 +10,9 @@ DISTANCIA_APROXIMACION_M = 0.8
 DISTANCIA_SALIDA_M = 0.8
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_YAW = 2.0
+VELOCIDAD_AVANCE = 25
 VELOCIDAD_MAXIMA = 40
 VELOCIDAD_MAXIMA_YAW = 10.0
-ERROR_POS_MIN = 0.12
-ERROR_POS_MAX = 2.5
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
 
@@ -53,6 +52,7 @@ class NodoNavegacion(Node):
         self.error_integral = np.zeros(3)
         self.error_previo = np.zeros(3)
         self.punto_inicio_mision = np.zeros(3)
+        self.punto_inicio_segmento = np.zeros(3)
         self.tiempo_dt = 1.0 / 20.0
 
         self.sub_pose = self.create_subscription(Float32MultiArray, '/tello/pose_corregida', self.callback_pose_dron, 10)
@@ -132,7 +132,8 @@ class NodoNavegacion(Node):
             
             self.puntos_trayectoria_actual = [p0, p1, p2, p3, p4]
             self.punto_inicio_mision = self.posicion_dron_mundo.copy()
-            self.get_logger().info(f"Raíl P0 fijado. Inicio: {self.punto_inicio_mision} -> Destino P0: {p0}")
+            self.punto_inicio_segmento = self.posicion_dron_mundo.copy()
+            self.get_logger().info(f"P0 fijado. Inicio: {self.punto_inicio_mision} -> Destino P0: {p0}")
             self.estado_mision = 'IR_A_P0'
             self.mision_en_curso = True
             dist = np.linalg.norm(target['punto'] - self.posicion_dron_mundo)
@@ -184,73 +185,86 @@ class NodoNavegacion(Node):
 
         if not self.mision_en_curso and self.estado_mision == 'ESPERANDO_PUERTA':
             self.iniciar_siguiente_mision()
-            if not self.mision_en_curso:
-                self.detener_dron()
             return
-        
+
+        def verificar_cambio_tramo(p_destino_actual):
+            vector_tramo = p_destino_actual - self.punto_inicio_segmento
+            longitud_total = np.linalg.norm(vector_tramo)
+            
+            vector_dron = self.posicion_dron_mundo - self.punto_inicio_segmento
+            progreso = np.dot(vector_dron, vector_tramo) / longitud_total
+            
+            distancia_real = np.linalg.norm(p_destino_actual - self.posicion_dron_mundo)
+            
+            if progreso >= (longitud_total * 0.5) or distancia_real < 0.2:
+                nuevo_inicio = self.punto_inicio_segmento + (vector_tramo * 0.5)
+                self.punto_inicio_segmento = nuevo_inicio
+                return True
+            return False
+
         if self.estado_mision == 'IR_A_P0':
             objetivo = self.puntos_trayectoria_actual[0]
-            if np.linalg.norm(self.error_previo) == 0:
-                 self.error_previo = self.calcular_error_trayectoria(objetivo)
-            if self.ir_a_posicion(objetivo, yaw = True):
-                self.get_logger().info(f"P0 alcanzado")
-                self.resetear_pid()
+            self.ir_a_posicion(objetivo, yaw=True)
+            
+            if verificar_cambio_tramo(objetivo):
+                self.get_logger().info("50% de P0 completado -> P1")
                 self.estado_mision = 'IR_A_P1'
 
-        if self.estado_mision == 'IR_A_P1':
+        elif self.estado_mision == 'IR_A_P1':
             objetivo = self.puntos_trayectoria_actual[1]
-            if self.ir_a_posicion(objetivo, yaw = True):
-                self.get_logger().info(f"P1 alcanzado")
-                self.resetear_pid()
+            self.ir_a_posicion(objetivo, yaw=True)
+            
+            if verificar_cambio_tramo(objetivo):
+                self.get_logger().info("50% de P1 completado -> P2")
                 self.estado_mision = 'IR_A_P2'
         
-        if self.estado_mision == 'IR_A_P2':
+        elif self.estado_mision == 'IR_A_P2':
             objetivo = self.puntos_trayectoria_actual[2]
-            if self.ir_a_posicion(objetivo, yaw = False):
-                self.get_logger().info(f"P2 alcanzado")
-                self.resetear_pid()
+            self.ir_a_posicion(objetivo, yaw=True) 
+            
+            if verificar_cambio_tramo(objetivo):
+                self.get_logger().info("50% de P2 completado -> P3")
                 self.estado_mision = 'IR_A_P3'
 
-        if self.estado_mision == 'IR_A_P3':
+        elif self.estado_mision == 'IR_A_P3':
             objetivo = self.puntos_trayectoria_actual[3]
-            if self.ir_a_posicion(objetivo, yaw = False):
-                self.get_logger().info(f"P3 alcanzado")
-                self.resetear_pid()
-                self.estado_mision = 'IR_A_P4'
+            self.ir_a_posicion(objetivo, yaw=False)
 
-        elif self.estado_mision == 'ROTAR_HACIA_PUERTA':
-            if self.rotar_a_yaw():
-                self.get_logger().info("Alineado. Cruzando hacia punto de salida...")
-                self.resetear_pid()
-                self.estado_mision = 'IR_A_P2'
+            if verificar_cambio_tramo(objetivo):
+                self.get_logger().info("50% de P3 completado -> P4")
+                self.estado_mision = 'IR_A_P4'
 
         elif self.estado_mision == 'IR_A_P4':
             objetivo = self.puntos_trayectoria_actual[4]
+            self.ir_a_posicion(objetivo, yaw=False)
             
-            if self.ir_a_posicion(objetivo, yaw = False):
-                self.get_logger().info("--- PUERTA CRUZADA ---")
-                
-                if 0 <= self.indice_objetivo_actual < len(self.puertas_pendientes):
-                    puerta_completada = self.puertas_pendientes.pop(self.indice_objetivo_actual)
-                    self.puertas_visitadas.append(puerta_completada['punto'])
-                    self.minimo_una_cruzada = True
-                    self.get_logger().info(f"Puerta archivada. Total visitadas: {len(self.puertas_visitadas)}")
-
-                if len(self.puertas_pendientes) > 0:
-                    self.get_logger().info(f"Quedan {len(self.puertas_pendientes)} puertas pendientes")
-                    self.indice_objetivo_actual = -1
-                    self.mision_en_curso = False
-                    self.resetear_pid()
-                    self.estado_mision = 'ESPERANDO_PUERTA'
-                    
-                else:
-                    self.get_logger().info("Lista de pendientes vacía. Misión Finalizada.")
-                    self.estado_mision = 'FIN_MISION'
+            dist_final = np.linalg.norm(objetivo - self.posicion_dron_mundo)
+            
+            vector_tramo = objetivo - self.punto_inicio_segmento
+            progreso = np.dot(self.posicion_dron_mundo - self.punto_inicio_segmento, vector_tramo) / np.linalg.norm(vector_tramo)
+            
+            if dist_final < 0.4 or progreso > np.linalg.norm(vector_tramo):
+                self.get_logger().info("PUERTA CRUZADA Y SALIDA COMPLETADA ")
+                self.finalizar_puerta()
 
         elif self.estado_mision == 'FIN_MISION':
             self.detener_dron()
             self.enviar_comando_velocidad(2,0,0,0)
             self.mision_en_curso = False
+
+    def finalizar_puerta(self):
+        if 0 <= self.indice_objetivo_actual < len(self.puertas_pendientes):
+            puerta_completada = self.puertas_pendientes.pop(self.indice_objetivo_actual)
+            self.puertas_visitadas.append(puerta_completada['punto'])
+            self.minimo_una_cruzada = True
+        
+        self.mision_en_curso = False
+        self.resetear_pid()
+        if len(self.puertas_pendientes) > 0:
+            self.indice_objetivo_actual = -1
+            self.estado_mision = 'ESPERANDO_PUERTA'
+        else:
+            self.estado_mision = 'FIN_MISION'
 
     def mapear_valor(self, valor, in_min, in_max, out_min, out_max):
         if valor <= in_min:
@@ -262,40 +276,24 @@ class NodoNavegacion(Node):
         return out_min + (valor - in_min) * pendiente
     
     def ir_a_posicion(self, punto_objetivo, yaw):
-        error_posicion = self.calcular_error_trayectoria(punto_objetivo)
-        magnitud_error = np.linalg.norm(error_posicion)
+        vector_total, vector_correccion = self.calcular_error_trayectoria(punto_objetivo)
         
-        error_min = ERROR_POS_MIN
-        if self.estado_mision == 'IR_A_P0':
-            error_min = ERROR_POS_MIN * 2
-        elif self.estado_mision == 'IR_A_P1':
-            error_min = ERROR_POS_MIN * 1.2
+        P_vector = vector_total * KP
 
-        if magnitud_error < error_min:
-            return True
-
-        velocidad_base_escalar = self.mapear_valor(magnitud_error, 0, ERROR_POS_MAX, 0, VELOCIDAD_MAXIMA)
+        self.error_integral += vector_correccion * self.tiempo_dt
         
-        if magnitud_error > 0.001:
-            vector_base = (error_posicion / magnitud_error) * velocidad_base_escalar
-            P_vector = vector_base * KP
-        else:
-            P_vector = np.zeros(3)
-
-        
-        self.error_integral += error_posicion * self.tiempo_dt
         self.error_integral = np.clip(self.error_integral, -MAX_INTEGRAL, MAX_INTEGRAL)
+        
         I_vector = KI * self.error_integral
         
-        derivada = (error_posicion - self.error_previo) / self.tiempo_dt
+        derivada = (vector_total - self.error_previo) / self.tiempo_dt
         D_vector = KD * derivada
         
-        self.error_previo = error_posicion
+        self.error_previo = vector_total
         
         velocidad_mundo = P_vector + I_vector + D_vector
 
         norm_vel = np.linalg.norm(velocidad_mundo)
-        
         if norm_vel > VELOCIDAD_MAXIMA:
             velocidad_mundo = (velocidad_mundo / norm_vel) * VELOCIDAD_MAXIMA
 
@@ -313,9 +311,6 @@ class NodoNavegacion(Node):
         
         yaw_rad = math.radians(self.yaw_dron_deg)
 
-        # Fórmula de rotación de vectores 2D:
-        # V_fb = V_x_mundo * cos(yaw) + V_y_mundo * sin(yaw)
-        # V_lr = -V_x_mundo * sin(yaw) + V_y_mundo * cos(yaw)       
         avance_cuerpo = vx_mundo * math.cos(yaw_rad) + vy_mundo * math.sin(yaw_rad)
         lateral_cuerpo = -vx_mundo * math.sin(yaw_rad) + vy_mundo * math.cos(yaw_rad)
         
@@ -324,39 +319,27 @@ class NodoNavegacion(Node):
         return False
     
     def calcular_error_trayectoria(self, punto_objetivo):
-        p_inicio = None
-        if self.estado_mision == 'IR_A_P0':
-            p_inicio = self.punto_inicio_mision
-        elif self.estado_mision == 'IR_A_P1':
-            p_inicio = self.puntos_trayectoria_actual[0] 
-        elif self.estado_mision == 'IR_A_P2':
-            p_inicio = self.puntos_trayectoria_actual[1] 
-        elif self.estado_mision == 'IR_A_P3':
-            p_inicio = self.puntos_trayectoria_actual[2] 
-        elif self.estado_mision == 'IR_A_P4':
-            p_inicio = self.puntos_trayectoria_actual[3] 
+        p_inicio = self.punto_inicio_segmento
         
-        error_real = punto_objetivo - self.posicion_dron_mundo
-        
-        if p_inicio is None:
-            return error_real
+        if np.linalg.norm(p_inicio) == 0 and np.linalg.norm(self.posicion_dron_mundo) == 0:
+             diff = punto_objetivo - self.posicion_dron_mundo
+             return diff, diff 
 
         v_ruta = punto_objetivo - p_inicio
         len_ruta = np.linalg.norm(v_ruta)
         
         if len_ruta < 0.01:
-            return error_real
+            diff = punto_objetivo - self.posicion_dron_mundo
+            return diff, diff
 
         u_ruta = v_ruta / len_ruta
         v_dron = self.posicion_dron_mundo - p_inicio
         
         proyeccion = np.dot(v_dron, u_ruta)
         proyeccion_clamped = np.clip(proyeccion, 0, len_ruta)
-        
         p_ideal = p_inicio + (proyeccion_clamped * u_ruta)
         
         e_lateral = p_ideal - self.posicion_dron_mundo 
-        e_avance = punto_objetivo - p_ideal            
         
         e_lat_z = e_lateral[2]
         e_lat_xy = np.array([e_lateral[0], e_lateral[1], 0.0])
@@ -364,15 +347,18 @@ class NodoNavegacion(Node):
         v_correccion_xy = e_lat_xy * KL_Y
         v_correccion_z = np.array([0.0, 0.0, e_lat_z]) * KL_Z
 
-        e_lateral_ponderado = v_correccion_xy + v_correccion_z
+        vector_solo_correccion = v_correccion_xy + v_correccion_z
 
-        dist_lat = np.linalg.norm(e_lateral_ponderado)
-        
+        dist_lat = np.linalg.norm(vector_solo_correccion)
         factor_penalizacion = dist_lat / KML
         k_avance = 1.0 - factor_penalizacion
         k_avance = np.clip(k_avance, 0.1, 1.0) 
         
-        return e_lateral_ponderado + (e_avance * k_avance)
+        e_avance = u_ruta * VELOCIDAD_AVANCE
+        
+        vector_total = vector_solo_correccion + (e_avance * k_avance)
+        
+        return vector_total, vector_solo_correccion
     
     def rotar_a_yaw(self):
         error_yaw = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
