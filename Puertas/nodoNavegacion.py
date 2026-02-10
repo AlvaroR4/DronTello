@@ -11,6 +11,7 @@ DISTANCIA_SALIDA_M = 0.6
 DISTANCIA_P_CONTROL_M = 0.5 #respecto P_aprox
 PUNTOS_RECTA = 10
 PUNTOS_CURVA = 10
+PUNTOS_ANTICIPACION = 1 #desactivado = 1
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_YAW = 2.0
 VELOCIDAD_AVANCE = 15
@@ -18,7 +19,6 @@ VELOCIDAD_MAXIMA = 40
 VELOCIDAD_MAXIMA_YAW = 10.0
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
-
 KP = 2.2
 KI = 1.2
 KD = 0.6
@@ -220,9 +220,10 @@ class NodoNavegacion(Node):
             if idx_mas_cercano > self.idx_actual:
                 self.idx_actual = idx_mas_cercano
             
-            idx_objetivo = self.idx_actual + 1
+            idx_objetivo = min(self.idx_actual + PUNTOS_ANTICIPACION, len(self.ruta_global) - 1)
+            es_fase_final = (idx_objetivo == len(self.ruta_global) - 1)
 
-            if idx_objetivo >= len(self.ruta_global):
+            if es_fase_final:
                 ultimo_punto = self.ruta_global[-1]
                 dist_final = np.linalg.norm(ultimo_punto - self.posicion_dron_mundo)
                 
@@ -230,7 +231,8 @@ class NodoNavegacion(Node):
                     self.get_logger().info("--- TRAYECTORIA COMPLETADA ---")
                     self.finalizar_puerta()
                 else:
-                    self.punto_inicio_segmento = self.ruta_global[self.idx_actual - 1] if self.idx_actual > 0 else self.ruta_global[0]
+                    punto_A = self.ruta_global[self.idx_actual]
+                    self.punto_inicio_segmento = punto_A
                     self.ir_a_posicion(ultimo_punto, yaw=False)
 
             else:
@@ -238,11 +240,8 @@ class NodoNavegacion(Node):
                 punto_B = self.ruta_global[idx_objetivo]        
                 
                 self.punto_inicio_segmento = punto_A
-                
-                es_ultimo_tramo = (idx_objetivo == len(self.ruta_global) - 1)
-                usar_yaw = not es_ultimo_tramo
-                
-                self.ir_a_posicion(punto_B, yaw=usar_yaw)
+
+                self.ir_a_posicion(punto_B, yaw=True)
 
         elif self.estado_mision == 'FIN_MISION':
             self.detener_dron()
