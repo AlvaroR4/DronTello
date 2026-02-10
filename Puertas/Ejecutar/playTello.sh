@@ -2,6 +2,24 @@
 
 # ./playTello.sh [Aruco|Puertas]
 
+SSID="TELLO-D2AA73"
+
+echo "[WIFI] Intentando conectar a la red '$SSID'"
+if nmcli device wifi connect "$SSID"; then
+    echo "[WIFI] Conexión establecida con éxito."
+else
+    echo "[ERROR] No se pudo conectar al WiFi '$SSID'. "
+    exit 1
+fi
+
+echo "[RED] Verificando conexión con el dron"
+if ping -c 3 192.168.10.1 > /dev/null; then
+    echo "[RED] Dron detectado."
+else
+    exit 1
+fi
+
+
 SESSION_NAME="dron"
 
 VENV_TELLOPOS="source ~/telloPos/bin/activate"

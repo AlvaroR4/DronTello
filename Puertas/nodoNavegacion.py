@@ -6,11 +6,14 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-DISTANCIA_APROXIMACION_M = 0.4
+DISTANCIA_APROXIMACION_M = 0.6
 DISTANCIA_SALIDA_M = 0.6
+DISTANCIA_P_CONTROL_M = 0.5 #respecto P_aprox
+PUNTOS_RECTA = 10
+PUNTOS_CURVA = 10
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_YAW = 2.0
-VELOCIDAD_AVANCE = 25
+VELOCIDAD_AVANCE = 15
 VELOCIDAD_MAXIMA = 40
 VELOCIDAD_MAXIMA_YAW = 10.0
 ERROR_YAW_DEG = 2.0
@@ -19,8 +22,8 @@ DISTANCIA_NUEVA_PUERTA = 1.25
 KP = 2.2
 KI = 1.2
 KD = 0.6
-KL_Y = 6.0
-KL_Z = 3.0
+KL_Y = 4.0
+KL_Z = 1.5
 KML = 1.0 #en funcion de esta se calcula Ka
 MAX_INTEGRAL = 15.0
 
@@ -97,7 +100,7 @@ class NodoNavegacion(Node):
         angulo_promedio_rad = math.atan2(y_total, x_total)
         return math.degrees(angulo_promedio_rad)
     
-    def generar_curva_bezier_quad(self, p0, p1, p2, pasos=10):
+    def generar_curva_bezier(self, p0, p1, p2, pasos):
         ruta = []
         for t in np.linspace(0, 1, pasos):
             punto = (1-t)**2 * p0 + 2*(1-t)*t * p1 + t**2 * p2
@@ -130,17 +133,20 @@ class NodoNavegacion(Node):
             normal = np.array([math.cos(rad), math.sin(rad), 0.0])
             
             p_inicio_dron = self.posicion_dron_mundo.copy()
-            p_aprox = punto_central - (DISTANCIA_APROXIMACION_M * 1.5) * normal
-            p_salida = punto_central + (DISTANCIA_SALIDA_M * 1.0) * normal
-            p_control = p_aprox - (DISTANCIA_APROXIMACION_M * 0.5) * normal
+            p_aprox = punto_central - DISTANCIA_APROXIMACION_M * normal
+            p_salida = punto_central + DISTANCIA_SALIDA_M * normal
+            p_control = p_aprox - DISTANCIA_P_CONTROL_M * normal
 
             self.ruta_global = []
             
-            tramo_curvo = self.generar_curva_bezier_quad(p_inicio_dron, p_control, p_aprox, pasos=10)
+            tramo_curvo = self.generar_curva_bezier(p_inicio_dron, p_control, p_aprox, PUNTOS_CURVA)
             self.ruta_global.extend(tramo_curvo)
             
-            self.ruta_global.append(punto_central) 
-            self.ruta_global.append(p_salida)
+            vector_recta = p_salida - p_aprox
+            for i in range(1, PUNTOS_RECTA + 1): 
+                t = i / PUNTOS_RECTA
+                p = p_aprox + (vector_recta * t)
+                self.ruta_global.append(p)
             
             self.idx_actual = 0 
             self.punto_inicio_segmento = p_inicio_dron.copy() 
@@ -148,8 +154,6 @@ class NodoNavegacion(Node):
             self.estado_mision = 'SEGUIR_TRAYECTORIA'
             self.mision_en_curso = True
             
-            self.get_logger().info(f"Ruta Bézier generada: {len(self.ruta_global)} puntos.")
-
     def callback_nueva_puerta(self, msg: Float32MultiArray):
         if not self.pose_recibida or len(msg.data) < 4:
             return
@@ -290,20 +294,30 @@ class NodoNavegacion(Node):
         if norm_vel > VELOCIDAD_MAXIMA:
             velocidad_mundo = (velocidad_mundo / norm_vel) * VELOCIDAD_MAXIMA
 
+        vx_mundo = velocidad_mundo[0]
+        vy_mundo = velocidad_mundo[1]
+        vz_mundo = velocidad_mundo[2]
+        
         rotacion = 0
         if yaw:
-            diff_yaw = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
+            v_carril = punto_objetivo - self.punto_inicio_segmento
+            
+            if np.linalg.norm(v_carril) < 0.01:
+                 dx, dy = velocidad_mundo[0], velocidad_mundo[1]
+            else:
+                 dx, dy = v_carril[0], v_carril[1]
+
+            angulo_carril_rad = math.atan2(dy, dx)
+            angulo_carril_deg = math.degrees(angulo_carril_rad)
+            
+            diff_yaw = normalizar_angulo_deg(angulo_carril_deg - self.yaw_dron_deg)
+
             if abs(diff_yaw) < ERROR_YAW_DEG:
                 rotacion = 0
             else:
                 rotacion = rango_velocidad(AUMENTAR_YAW * diff_yaw, VELOCIDAD_MAXIMA_YAW)
 
-        vx_mundo = velocidad_mundo[0]
-        vy_mundo = velocidad_mundo[1]
-        vz_mundo = velocidad_mundo[2]
-        
         yaw_rad = math.radians(self.yaw_dron_deg)
-
         avance_cuerpo = vx_mundo * math.cos(yaw_rad) + vy_mundo * math.sin(yaw_rad)
         lateral_cuerpo = -vx_mundo * math.sin(yaw_rad) + vy_mundo * math.cos(yaw_rad)
         
@@ -353,18 +367,6 @@ class NodoNavegacion(Node):
         
         return vector_total, vector_solo_correccion
     
-    def rotar_a_yaw(self):
-        error_yaw = normalizar_angulo_deg(self.angulo_objetivo_deg - self.yaw_dron_deg)
-        
-        if abs(error_yaw) < ERROR_YAW_DEG:
-            self.detener_dron()
-            return True
-        
-        
-        rotacion = rango_velocidad(AUMENTAR_YAW * error_yaw, VELOCIDAD_MAXIMA_YAW)
-        self.enviar_comando_velocidad(0, 0, 0, rotacion) 
-        return False
-
     def enviar_comando_velocidad(self, lr, fb, ud, yv):
         msg = Float32MultiArray(data=[float(lr), float(fb), float(ud), float(yv)])
         #msg = Float32MultiArray(data=[0,0,0,0])
