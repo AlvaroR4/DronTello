@@ -9,22 +9,22 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 DISTANCIA_APROXIMACION_M = 0.6
 DISTANCIA_SALIDA_M = 0.6
 DISTANCIA_P_CONTROL_M = 0.5 #respecto P_aprox
-PUNTOS_RECTA = 10
-PUNTOS_CURVA = 10
+PUNTOS_RECTA = 15
+PUNTOS_CURVA = 15
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_YAW = 2.0
-VELOCIDAD_AVANCE = 15
+VELOCIDAD_AVANCE = 20
 VELOCIDAD_MAXIMA = 40
 VELOCIDAD_MAXIMA_YAW = 10.0
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
 
-KP = 2.2
+KP = 1.8
 KI = 1.2
-KD = 0.6
+KD = 0.8
 KL_Y = 4.0
-KL_Z = 1.5
-KML = 1.0 #en funcion de esta se calcula Ka
+KL_Z = 1.0
+KML = 0.6 #en funcion de esta se calcula Ka
 MAX_INTEGRAL = 15.0
 
 def rango_velocidad(valor, maximo):
