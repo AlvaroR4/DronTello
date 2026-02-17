@@ -5,13 +5,14 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-
+"""
 DISTANCIA_APROXIMACION_M = 0.6
 DISTANCIA_SALIDA_M = 0.6
-DISTANCIA_P_CONTROL_M = 0.5 #respecto P_aprox
-PUNTOS_RECTA = 15
-PUNTOS_CURVA = 15
-PUNTOS_ANTICIPACION = 1 #desactivado = 1
+DISTANCIA_P_CONTROL_M = 0.8 #respecto P_aprox
+DISTANCIA_BUSQUEDA_M = 0.5 
+DISTANCIA_ANTICIPACION_M = 0.4
+PUNTOS_RECTA = 25
+PUNTOS_CURVA = 30
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_YAW = 2.0
 VELOCIDAD_AVANCE = 20
@@ -19,13 +20,61 @@ VELOCIDAD_MAXIMA = 40
 VELOCIDAD_MAXIMA_YAW = 10.0
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
-KP = 1.8
-KI = 1.2
-KD = 0.8
-KL_Y = 4.0
+KP = 2.4
+KI = 1.0
+KD = 1.0
+KL_Y = 5.0
 KL_Z = 1.0
 KML = 0.6 #en funcion de esta se calcula Ka
 MAX_INTEGRAL = 15.0
+"""
+#oreo
+""" 
+DISTANCIA_APROXIMACION_M = 0.6
+DISTANCIA_SALIDA_M = 0.6
+DISTANCIA_P_CONTROL_M = 0.8 #respecto P_aprox
+DISTANCIA_BUSQUEDA_M = 0.5 
+DISTANCIA_ANTICIPACION_M = 0.4
+PUNTOS_RECTA = 25
+PUNTOS_CURVA = 20
+MARGEN_ALTURA_M = 0.0
+AUMENTAR_YAW = 2.0
+VELOCIDAD_AVANCE = 20
+VELOCIDAD_MAXIMA = 40
+VELOCIDAD_MAXIMA_YAW = 10.0
+ERROR_YAW_DEG = 2.0
+DISTANCIA_NUEVA_PUERTA = 1.25 
+KP = 2.2
+KI = 1.2
+KD = 0.8
+KL_Y = 5.0
+KL_Z = 1.0
+KML = 0.5 #en funcion de esta se calcula Ka
+MAX_INTEGRAL = 15.0
+"""
+#webots
+DISTANCIA_APROXIMACION_M = 0.8
+DISTANCIA_SALIDA_M = 0.8
+DISTANCIA_P_CONTROL_M = 1.0 #respecto P_aprox
+DISTANCIA_BUSQUEDA_M = 0.8
+DISTANCIA_ANTICIPACION_M = 0.4
+PUNTOS_RECTA = 80
+PUNTOS_CURVA = 80
+MARGEN_ALTURA_M = 0.0
+AUMENTAR_YAW = 6.0
+VELOCIDAD_AVANCE = 25
+VELOCIDAD_MAXIMA = 50
+VELOCIDAD_MAXIMA_YAW = 20.0
+ERROR_YAW_DEG = 2.0
+DISTANCIA_NUEVA_PUERTA = 1.25 
+KP = 1.4
+KI = 0.6
+KD = 0.2
+KL_Y = 2.5
+KL_Z = 2.5
+KML = 0.6 #en funcion de esta se calcula Ka
+MAX_INTEGRAL = 20.0
+
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -203,24 +252,32 @@ class NodoNavegacion(Node):
         if self.estado_mision == 'SEGUIR_TRAYECTORIA':
             if not self.ruta_global: return
 
-            ventana_busqueda = 10 
             idx_mas_cercano = self.idx_actual
-            dist_minima = 9999.0
+            dist_minima = float('inf')
+            dist_recorrida_acumulada = 0.0 
 
-            inicio_busqueda = self.idx_actual
-            fin_busqueda = min(self.idx_actual + ventana_busqueda, len(self.ruta_global))
+            for i in range(self.idx_actual, len(self.ruta_global)):
+                if i > self.idx_actual:
+                    dist_recorrida_acumulada += np.linalg.norm(self.ruta_global[i] - self.ruta_global[i-1])
+                
+                if dist_recorrida_acumulada > DISTANCIA_BUSQUEDA_M:
+                    break
 
-            for i in range(inicio_busqueda, fin_busqueda):
-                p = self.ruta_global[i]
-                d = np.linalg.norm(p - self.posicion_dron_mundo)
-                if d < dist_minima:
-                    dist_minima = d
+                d_euclidea = np.linalg.norm(self.ruta_global[i] - self.posicion_dron_mundo)
+                if d_euclidea < dist_minima:
+                    dist_minima = d_euclidea
                     idx_mas_cercano = i
+
+            self.idx_actual = idx_mas_cercano
+
+            idx_objetivo = self.idx_actual
+            dist_acumulada = 0.0
+            for j in range(self.idx_actual + 1, len(self.ruta_global)):
+                dist_acumulada += np.linalg.norm(self.ruta_global[j] - self.ruta_global[j-1])
+                idx_objetivo = j
+                if dist_acumulada >= DISTANCIA_ANTICIPACION_M:
+                    break
             
-            if idx_mas_cercano > self.idx_actual:
-                self.idx_actual = idx_mas_cercano
-            
-            idx_objetivo = min(self.idx_actual + PUNTOS_ANTICIPACION, len(self.ruta_global) - 1)
             es_fase_final = (idx_objetivo == len(self.ruta_global) - 1)
 
             if es_fase_final:

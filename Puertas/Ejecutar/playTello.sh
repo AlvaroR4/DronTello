@@ -6,7 +6,9 @@ SESSION_NAME="dron"
 VENV_TELLOPOS="source ~/telloPos/bin/activate"
 VENV_TELLO="source ~/tello/bin/activate"
 RUTA_SCRIPTS="~/DronTello/Puertas"
-SSID="TELLO-D2AA73"
+#SSID="TELLO-D2AA73" #oreo
+SSID="TELLO-621717"
+
 
 if [ "$1" == "Aruco" ]; then
     DETECTION_NODE="nodoArucoDeteccion.py"
@@ -36,7 +38,7 @@ sleep 2
 
 echo "[INICIO] Lanzando todo en una sesión de TMUX llamada '$SESSION_NAME'. Modo: $1"
 
-tmux kill-session -t $SESSION_NAME 2>/dev/null
+#tmux kill-session -t $SESSION_NAME 2>/dev/null
 tmux new-session -d -s $SESSION_NAME -n "Nodos" 
 
 tmux split-window -v -p 50 -t $SESSION_NAME:0

@@ -5,8 +5,8 @@ from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 import math
 
-ALTO_PUERTA = 0.7
-ANCHO_PUERTA = 0.5
+ALTO_PUERTA = 1.3
+ANCHO_PUERTA = 1.0
 
 class VisualizadorPuertas(Node):
     def __init__(self):
