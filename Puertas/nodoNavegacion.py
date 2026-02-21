@@ -5,14 +5,14 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-"""
+
 DISTANCIA_APROXIMACION_M = 0.6
 DISTANCIA_SALIDA_M = 0.6
-DISTANCIA_P_CONTROL_M = 0.8 #respecto P_aprox
-DISTANCIA_BUSQUEDA_M = 0.5 
-DISTANCIA_ANTICIPACION_M = 0.4
+DISTANCIA_P_CONTROL_M = 0.6 #respecto P_aprox
+DISTANCIA_BUSQUEDA_M = 0.8
+DISTANCIA_ANTICIPACION_M = 0.6
 PUNTOS_RECTA = 25
-PUNTOS_CURVA = 30
+PUNTOS_CURVA = 20
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_YAW = 2.0
 VELOCIDAD_AVANCE = 20
@@ -20,14 +20,13 @@ VELOCIDAD_MAXIMA = 40
 VELOCIDAD_MAXIMA_YAW = 10.0
 ERROR_YAW_DEG = 2.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
-KP = 2.4
+KP = 2.0
 KI = 1.0
-KD = 1.0
-KL_Y = 5.0
-KL_Z = 1.0
-KML = 0.6 #en funcion de esta se calcula Ka
+KD = 0.6
+KL_Y = 4.0
+KL_Z = 1.5
+KML = 0.5 #en funcion de esta se calcula Ka
 MAX_INTEGRAL = 15.0
-"""
 #oreo
 """ 
 DISTANCIA_APROXIMACION_M = 0.6
@@ -52,6 +51,7 @@ KL_Z = 1.0
 KML = 0.5 #en funcion de esta se calcula Ka
 MAX_INTEGRAL = 15.0
 """
+"""
 #webots
 DISTANCIA_APROXIMACION_M = 0.8
 DISTANCIA_SALIDA_M = 0.8
@@ -74,7 +74,7 @@ KL_Y = 2.5
 KL_Z = 2.5
 KML = 0.6 #en funcion de esta se calcula Ka
 MAX_INTEGRAL = 20.0
-
+"""
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)

@@ -20,10 +20,10 @@ ALTO_IMAGEN = 720
 
 MIN_CORNER_AREA = 10
 
-ALTO_REAL = 1.3
-ANCHO_REAL = 1.0
-#FOCAL = 900.0 #tello
-FOCAL = 617.0 #webots
+ALTO_REAL = 0.7
+ANCHO_REAL = 0.5
+FOCAL = 900.0 #tello
+#FOCAL = 617.0 #webots
 
 class NodoDeteccion(Node):
     def __init__(self):
