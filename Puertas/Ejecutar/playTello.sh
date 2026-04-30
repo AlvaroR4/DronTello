@@ -66,7 +66,7 @@ tmux send-keys -t $SESSION_NAME:0.2 "$VENV_TELLO && python3 $RUTA_SCRIPTS/$DETEC
 echo "[LANZADO] $DETECTION_NODE"
 sleep 1
 
-tmux send-keys -t $SESSION_NAME:0.3 "$VENV_TELLO && python3 $RUTA_SCRIPTS/nodoNavegacion.py" C-m
+tmux send-keys -t $SESSION_NAME:0.3 "$VENV_TELLO && python3 $RUTA_SCRIPTS/nodoNavegacionPlataforma.py" C-m
 echo "[LANZADO-DESPEGUE] nodoNavegacion.py"
 sleep 1
 

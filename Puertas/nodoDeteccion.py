@@ -20,8 +20,8 @@ ALTO_IMAGEN = 720
 
 MIN_CORNER_AREA = 10
 
-ALTO_REAL = 0.7
-ANCHO_REAL = 0.5
+ALTO_REAL = 0.6
+ANCHO_REAL = 0.35
 FOCAL = 900.0 #tello
 #FOCAL = 617.0 #webots
 
@@ -210,6 +210,11 @@ class NodoDeteccion(Node):
                 "nombre": "id3",
                 "color": (255, 0, 0),
                 "id": 3
+            },
+            {
+                "nombre": "id8",
+                "color": (255, 0, 0),
+                "id": 8
             }
         ]
 

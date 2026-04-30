@@ -47,7 +47,7 @@ class SimuladorPoseDron(Node):
             self.velocidades_cmd = np.zeros(4)
             
             if self.pose_actual[2] < 0.1:
-                self.pose_actual[2] = 1.0
+                self.pose_actual[2] = 1.4
             return
 
         self.velocidades_cmd = np.array(msg.data)
