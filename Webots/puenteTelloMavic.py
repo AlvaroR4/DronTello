@@ -51,10 +51,15 @@ class TelloMavicPuente(Node):
 
     def callback_velocidad(self, msg_in):
         lr_in, fb_in, ud_in, yv_in = msg_in.data
-        
+        if lr_in == 2 and fb_in == 0 and ud_in == 0:
+            vz = -0.5
+            vy = 0.0
+            
+        else: 
+            vy = lr_in * FACTOR_ESCALA
+            vz = ud_in * FACTOR_ESCALA
+
         vx = fb_in * FACTOR_ESCALA
-        vy = lr_in * FACTOR_ESCALA
-        vz = ud_in * FACTOR_ESCALA 
         wz = yv_in * FACTOR_ESCALA
 
         msg_out = Twist()

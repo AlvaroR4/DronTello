@@ -1,0 +1,59 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/released/projects/robots/kuka/youbot/protos/Youbot.proto"
+
+PROTO MyYoubot [
+  field SFVec3f    translation 0 0 0.12
+  field SFRotation rotation    0 0 1 0
+  field SFString   name        "youbot_agv"
+  field SFString   controller  "<generic>"
+]
+{
+  Youbot {
+    translation IS translation
+    rotation IS rotation
+    name IS name
+    controller IS controller
+    
+    # Inyectamos tu plataforma directamente en el robot
+    extensionSlot [
+      DEF PuertaHorizontal Pose {
+        # La elevamos 0.2m para que no roce con las ruedas 
+        translation 0 0 0.2
+        # Girada 90 grados en el eje Z (1.5708 radianes)
+        rotation 0 0 1 1.5708
+        children [
+          DEF SuperficieAterrizaje Pose {
+            children [
+              Shape {
+                appearance PBRAppearance {
+                  baseColor 0.8 0.8 0.8
+                  roughness 0.5
+                }
+                geometry Box {
+                  size 1.2 1.8 0.04
+                }
+              }
+            ]
+          }
+          DEF Aruco1 Pose {
+            translation -0.5 0.8 0.021
+            children [ Shape { appearance Appearance { texture ImageTexture { url [ "../texture/aruco7.png" ] } } geometry Plane { size 0.12 0.12 } } ]
+          }
+          DEF Aruco2 Pose {
+            translation 0.5 0.8 0.021
+            children [ Shape { appearance Appearance { texture ImageTexture { url [ "../texture/aruco7.png" ] } } geometry Plane { size 0.12 0.12 } } ]
+          }
+          DEF Aruco3 Pose {
+            translation 0.5 -0.8 0.021
+            children [ Shape { appearance Appearance { texture ImageTexture { url [ "../texture/aruco7.png" ] } } geometry Plane { size 0.12 0.12 } } ]
+          }
+          DEF Aruco4 Pose {
+            translation -0.5 -0.8 0.021
+            children [ Shape { appearance Appearance { texture ImageTexture { url [ "../texture/aruco7.png" ] } } geometry Plane { size 0.12 0.12 } } ]
+          }
+        ]
+      }
+    ]
+  }
+}

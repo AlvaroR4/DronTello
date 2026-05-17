@@ -14,18 +14,18 @@ PUNTOS_CURVA = 20
 PUNTOS_ANTICIPACION = 3 #desactivado = 1
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_YAW = 4.0
-VELOCIDAD_AVANCE = 20
-VELOCIDAD_MAXIMA = 40
+VELOCIDAD_AVANCE = 30
+VELOCIDAD_MAXIMA = 45
 VELOCIDAD_MAXIMA_YAW = 10.0
 ERROR_YAW_DEG = 8.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
 KP = 2.0
-KI = 1.5
-KD = 0.6
+KI = 2.0
+KD = 0.8
 KL_Y = 4.0
 KL_Z = 1.0
 KML = 0.4 #en funcion de esta se calcula Ka
-MAX_INTEGRAL = 15.0
+MAX_INTEGRAL = 25.0
 
 def rango_velocidad(valor, maximo):
     return np.clip(valor, -maximo, maximo)
@@ -150,6 +150,7 @@ class NodoNavegacion(Node):
             
             self.idx_actual = 0 
             self.punto_inicio_segmento = p_inicio_dron.copy() 
+            self.coord_puerta_fijada = np.array(punto_central, copy=True)
             
             self.estado_mision = 'SEGUIR_TRAYECTORIA'
             self.mision_en_curso = True
@@ -159,24 +160,38 @@ class NodoNavegacion(Node):
             return
 
         data = list(msg.data)
-        punto_recibido = np.array([data[0], data[1], data[2]])
+        punto_recibido = np.array([data[0] , data[1], data[2]])
         punto_recibido[2] = self.posicion_dron_mundo[2]
-        angulo_recibido = float(msg.data[3]) 
+        angulo_recibido = float(msg.data[3])
 
-        for p_vis in self.puertas_visitadas:
-            if np.linalg.norm(p_vis - punto_recibido) < DISTANCIA_NUEVA_PUERTA :
-                return
 
         puerta_existente = False
-        for puerta in self.puertas_pendientes:
-            if np.linalg.norm(puerta['punto'] - punto_recibido) < DISTANCIA_NUEVA_PUERTA :
-                n = puerta['n_muestras']
-                peso_historico = (n * (n + 1)) / 2
-                peso_nuevo = n + 1
-                numerador = (puerta['punto'] * peso_historico) + (punto_recibido * peso_nuevo)
-                denominador = peso_historico + peso_nuevo
-                puerta['punto'] = numerador / denominador
-                puerta['angulo'] = self.promediar_angulos_deg(puerta['angulo'], angulo_recibido, peso_historico, peso_nuevo)
+        for i, puerta in enumerate(self.puertas_pendientes):
+            if np.linalg.norm(puerta['punto'] - punto_recibido) < DISTANCIA_NUEVA_PUERTA:
+                
+                vector_cambio_lectura = punto_recibido - puerta['punto']
+                distancia_cambio = np.linalg.norm(vector_cambio_lectura)
+
+                if 0.05 < distancia_cambio < 0.50:
+                    
+                    puerta['punto'] = punto_recibido
+                    puerta['angulo'] = angulo_recibido
+                    
+                    if self.mision_en_curso and self.indice_objetivo_actual == i:
+                        
+                        vector_deformacion = punto_recibido - self.coord_puerta_fijada
+                        
+                        idx_inicio = self.idx_actual
+                        total_puntos = len(self.ruta_global)
+                        puntos_restantes = (total_puntos - 1) - idx_inicio
+                        
+                        if puntos_restantes > 0:
+                            for j in range(idx_inicio, total_puntos):
+                                factor = (j - idx_inicio) / puntos_restantes
+                                self.ruta_global[j] += vector_deformacion * factor
+                                
+                        self.coord_puerta_fijada = np.array(punto_recibido, copy=True)
+
                 puerta['n_muestras'] += 1
                 puerta_existente = True
                 break
@@ -227,12 +242,11 @@ class NodoNavegacion(Node):
                 ultimo_punto = self.ruta_global[-1]
                 dist_final = np.linalg.norm(ultimo_punto - self.posicion_dron_mundo)
                 
-                if dist_final < 0.25: 
+                if dist_final < 0.15: 
                     self.get_logger().info("--- TRAYECTORIA COMPLETADA ---")
                     self.finalizar_puerta()
                 else:
-                    punto_A = self.ruta_global[self.idx_actual]
-                    self.punto_inicio_segmento = punto_A
+                    self.punto_inicio_segmento = ultimo_punto
                     self.ir_a_posicion(ultimo_punto, yaw=False)
 
             else:

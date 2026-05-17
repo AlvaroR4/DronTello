@@ -20,10 +20,10 @@ ALTO_IMAGEN = 720
 
 MIN_CORNER_AREA = 10
 
-ALTO_REAL = 0.6
-ANCHO_REAL = 0.35
-FOCAL = 900.0 #tello
-#FOCAL = 617.0 #webots
+ALTO_REAL = 0.7
+ANCHO_REAL = 0.5
+#FOCAL = 900.0 #tello
+FOCAL = 617.0 #webots
 
 class NodoDeteccion(Node):
     def __init__(self):
@@ -135,12 +135,21 @@ class NodoDeteccion(Node):
     def ordenar_puntos(self, pts):
         pts = np.array(pts, dtype="float32")
         rect = np.zeros((4, 2), dtype="float32")
-        s = pts.sum(axis=1)
-        rect[0] = pts[np.argmin(s)] 
-        rect[2] = pts[np.argmax(s)] 
-        diff = np.diff(pts, axis=1).reshape(-1)
-        rect[1] = pts[np.argmin(diff)]
-        rect[3] = pts[np.argmax(diff)]
+        
+        ordenados_por_y = pts[np.argsort(pts[:, 1])]
+        
+        puntos_superiores = ordenados_por_y[:2]
+        puntos_inferiores = ordenados_por_y[2:]
+        
+        puntos_superiores = puntos_superiores[np.argsort(puntos_superiores[:, 0])]
+        
+        puntos_inferiores = puntos_inferiores[np.argsort(puntos_inferiores[:, 0])]
+        
+        rect[0] = puntos_superiores[0]   
+        rect[1] = puntos_superiores[1]   
+        rect[2] = puntos_inferiores[1]  
+        rect[3] = puntos_inferiores[0]
+        
         return rect
 
     def algoritmoDetectarPuertas(self, img_hsv, img_visualizacion):
