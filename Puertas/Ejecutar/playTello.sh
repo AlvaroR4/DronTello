@@ -6,8 +6,8 @@ SESSION_NAME="dron"
 VENV_TELLOPOS="source ~/telloPos/bin/activate"
 VENV_TELLO="source ~/tello/bin/activate"
 RUTA_SCRIPTS="~/DronTello/Puertas"
-#SSID="TELLO-D2AA73" #oreo
-SSID="TELLO-621717"
+SSID="TELLO-D2AA73" #oreo
+#SSID="TELLO-621717"
 
 
 if [ "$1" == "Aruco" ]; then
@@ -72,7 +72,7 @@ sleep 1
 
 if [ "$MODO_VISUAL" == "ON" ]; then
     echo "[LANZANDO] Visualización"
-    tmux send-keys -t $SESSION_NAME:1.0 "$VENV_TELLO && python3 $RUTA_SCRIPTS/Visualizar/visualizadorRviz.py" C-m
+    tmux send-keys -t $SESSION_NAME:1.0 "$VENV_TELLO && python3 $RUTA_SCRIPTS/Visualizar/visualizadorPlataforma.py" C-m
     tmux send-keys -t $SESSION_NAME:1.1 "rviz2" C-m
 fi
 

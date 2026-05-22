@@ -11,20 +11,20 @@ DISTANCIA_SALIDA_M = 0.0
 DISTANCIA_P_CONTROL_M = 0.5 #respecto P_aprox
 PUNTOS_RECTA = 20
 PUNTOS_CURVA = 20
-PUNTOS_ANTICIPACION = 3 #desactivado = 1
+PUNTOS_ANTICIPACION = 1 #desactivado = 1
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_YAW = 4.0
-VELOCIDAD_AVANCE = 30
-VELOCIDAD_MAXIMA = 45
+VELOCIDAD_AVANCE = 35
+VELOCIDAD_MAXIMA = 55
 VELOCIDAD_MAXIMA_YAW = 10.0
 ERROR_YAW_DEG = 8.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
 KP = 2.0
-KI = 2.0
+KI = 2.5
 KD = 0.8
 KL_Y = 4.0
 KL_Z = 1.0
-KML = 0.4 #en funcion de esta se calcula Ka
+KML = 0.8 #en funcion de esta se calcula Ka
 MAX_INTEGRAL = 25.0
 
 def rango_velocidad(valor, maximo):
@@ -46,12 +46,8 @@ class NodoNavegacion(Node):
         self.angulo_objetivo_deg = 0.0
         self.puerta_para_promediar = None
         self.primera_puerta = True
-        self.puertas_pendientes = []  # {'punto': np.array, 'angulo': float, 'n_muestras': int}
-        self.puertas_visitadas = []   # Lista de puntos (np.array) de puertas ya cruzadas
-        self.todas_las_puertas = [] #para visualzar
-        self.minimo_una_cruzada = False 
-        self.indice_objetivo_actual = -1
-
+        self.plataforma_objetivo = None  # Almacenará: {'punto': np.array, 'angulo': float, 'n_muestras': int}
+        
         self.error_integral = np.zeros(3)
         self.error_previo = np.zeros(3)
         self.punto_inicio_mision = np.zeros(3)
@@ -107,53 +103,39 @@ class NodoNavegacion(Node):
             ruta.append(punto)
         return ruta
     
-    def iniciar_siguiente_mision(self):
-        if not self.puertas_pendientes:
-            if self.minimo_una_cruzada:
-                self.get_logger().info("Misión cumplida.")
-                self.estado_mision = 'FIN_MISION' 
+    def iniciar_mision_plataforma(self):
+        if self.plataforma_objetivo is None or self.plataforma_objetivo['n_muestras'] <= 3:
             return
 
-        self.puertas_pendientes.sort(key=lambda p: np.linalg.norm(p['punto'] - self.posicion_dron_mundo))
-        indice_seleccionado = -1
-        for i, puerta in enumerate(self.puertas_pendientes):
-            if puerta['n_muestras'] > 3: 
-                indice_seleccionado = i
-                break
+        punto_central = self.plataforma_objetivo['punto']
+        angulo_obj = self.plataforma_objetivo['angulo']
+        self.angulo_objetivo_deg = angulo_obj
         
-        if indice_seleccionado != -1:
-            target = self.puertas_pendientes[indice_seleccionado]
-            self.indice_objetivo_actual = indice_seleccionado
-            
-            punto_central = target['punto']
-            angulo_obj = target['angulo']
-            self.angulo_objetivo_deg = angulo_obj
-            
-            rad = math.radians(angulo_obj)
-            normal = np.array([math.cos(rad), math.sin(rad), 0.0])
-            
-            p_inicio_dron = self.posicion_dron_mundo.copy()
-            p_aprox = punto_central - DISTANCIA_APROXIMACION_M * normal
-            p_salida = punto_central + DISTANCIA_SALIDA_M * normal
-            p_control = p_aprox - DISTANCIA_P_CONTROL_M * normal
+        rad = math.radians(angulo_obj)
+        normal = np.array([math.cos(rad), math.sin(rad), 0.0])
+        
+        p_inicio_dron = self.posicion_dron_mundo.copy()
+        p_aprox = punto_central - DISTANCIA_APROXIMACION_M * normal
+        p_salida = punto_central + DISTANCIA_SALIDA_M * normal
+        p_control = p_aprox - DISTANCIA_P_CONTROL_M * normal
 
-            self.ruta_global = []
-            
-            tramo_curvo = self.generar_curva_bezier(p_inicio_dron, p_control, p_aprox, PUNTOS_CURVA)
-            self.ruta_global.extend(tramo_curvo)
-            
-            vector_recta = p_salida - p_aprox
-            for i in range(1, PUNTOS_RECTA + 1): 
-                t = i / PUNTOS_RECTA
-                p = p_aprox + (vector_recta * t)
-                self.ruta_global.append(p)
-            
-            self.idx_actual = 0 
-            self.punto_inicio_segmento = p_inicio_dron.copy() 
-            self.coord_puerta_fijada = np.array(punto_central, copy=True)
-            
-            self.estado_mision = 'SEGUIR_TRAYECTORIA'
-            self.mision_en_curso = True
+        self.ruta_global = []
+        
+        tramo_curvo = self.generar_curva_bezier(p_inicio_dron, p_control, p_aprox, PUNTOS_CURVA)
+        self.ruta_global.extend(tramo_curvo)
+        
+        vector_recta = p_salida - p_aprox
+        for i in range(1, PUNTOS_RECTA + 1): 
+            t = i / PUNTOS_RECTA
+            p = p_aprox + (vector_recta * t)
+            self.ruta_global.append(p)
+        
+        self.idx_actual = 0 
+        self.punto_inicio_segmento = p_inicio_dron.copy() 
+        self.coord_puerta_fijada = np.array(punto_central, copy=True)
+        
+        self.estado_mision = 'SEGUIR_TRAYECTORIA'
+        self.mision_en_curso = True
             
     def callback_nueva_puerta(self, msg: Float32MultiArray):
         if not self.pose_recibida or len(msg.data) < 4:
@@ -164,47 +146,36 @@ class NodoNavegacion(Node):
         punto_recibido[2] = self.posicion_dron_mundo[2]
         angulo_recibido = float(msg.data[3])
 
-
-        puerta_existente = False
-        for i, puerta in enumerate(self.puertas_pendientes):
-            if np.linalg.norm(puerta['punto'] - punto_recibido) < DISTANCIA_NUEVA_PUERTA:
-                
-                vector_cambio_lectura = punto_recibido - puerta['punto']
-                distancia_cambio = np.linalg.norm(vector_cambio_lectura)
-
-                if 0.05 < distancia_cambio < 0.50:
-                    
-                    puerta['punto'] = punto_recibido
-                    puerta['angulo'] = angulo_recibido
-                    
-                    if self.mision_en_curso and self.indice_objetivo_actual == i:
-                        
-                        vector_deformacion = punto_recibido - self.coord_puerta_fijada
-                        
-                        idx_inicio = self.idx_actual
-                        total_puntos = len(self.ruta_global)
-                        puntos_restantes = (total_puntos - 1) - idx_inicio
-                        
-                        if puntos_restantes > 0:
-                            for j in range(idx_inicio, total_puntos):
-                                factor = (j - idx_inicio) / puntos_restantes
-                                self.ruta_global[j] += vector_deformacion * factor
-                                
-                        self.coord_puerta_fijada = np.array(punto_recibido, copy=True)
-
-                puerta['n_muestras'] += 1
-                puerta_existente = True
-                break
-
-        if not puerta_existente:
-            nueva_puerta = {
+        if self.plataforma_objetivo is None:
+            self.plataforma_objetivo = {
                 'punto': punto_recibido,
                 'angulo': angulo_recibido,
                 'n_muestras': 1
             }
-            self.puertas_pendientes.append(nueva_puerta)
-            self.todas_las_puertas.append(nueva_puerta)
-            self.get_logger().info(f"Nueva puerta añadida a cola. Total pendientes: {len(self.puertas_pendientes)}")
+            self.get_logger().info("Plataforma detectada por primera vez")
+        else:
+            vector_cambio = punto_recibido - self.plataforma_objetivo['punto']
+            distancia_cambio = np.linalg.norm(vector_cambio)
+
+            if 0.1 < distancia_cambio < 1.0:
+                self.plataforma_objetivo['punto'] = punto_recibido
+                self.plataforma_objetivo['angulo'] = angulo_recibido
+                
+                if self.mision_en_curso:
+                    vector_deformacion = punto_recibido - self.coord_puerta_fijada
+                    
+                    idx_inicio = self.idx_actual
+                    total_puntos = len(self.ruta_global)
+                    puntos_restantes = (total_puntos - 1) - idx_inicio
+                    
+                    if puntos_restantes > 0:
+                        for j in range(idx_inicio, total_puntos):
+                            factor = (j - idx_inicio) / puntos_restantes
+                            self.ruta_global[j] += vector_deformacion * factor
+                            
+                    self.coord_puerta_fijada = np.array(punto_recibido, copy=True)
+
+            self.plataforma_objetivo['n_muestras'] += 1
 
     def bucle_de_control(self):
         self.publicar_datos_puertas()
@@ -213,7 +184,7 @@ class NodoNavegacion(Node):
             return
 
         if not self.mision_en_curso and self.estado_mision == 'ESPERANDO_PUERTA':
-            self.iniciar_siguiente_mision()
+            self.iniciar_mision_plataforma()
             return
         if self.estado_mision == 'SEGUIR_TRAYECTORIA':
             if not self.ruta_global: return
@@ -242,12 +213,13 @@ class NodoNavegacion(Node):
                 ultimo_punto = self.ruta_global[-1]
                 dist_final = np.linalg.norm(ultimo_punto - self.posicion_dron_mundo)
                 
-                if dist_final < 0.15: 
+                self.punto_inicio_segmento = ultimo_punto
+                (vy, vx, vz, vyaw) = self.ir_a_posicion(ultimo_punto, yaw=False)
+                velocidad = np.linalg.norm([vx, vy, vz])
+
+                if dist_final < 0.2 and velocidad < 15.0: 
                     self.get_logger().info("--- TRAYECTORIA COMPLETADA ---")
-                    self.finalizar_puerta()
-                else:
-                    self.punto_inicio_segmento = ultimo_punto
-                    self.ir_a_posicion(ultimo_punto, yaw=False)
+                    self.finalizar_mision()
 
             else:
                 punto_A = self.ruta_global[self.idx_actual]     
@@ -262,16 +234,9 @@ class NodoNavegacion(Node):
             self.enviar_comando_aterrizaje()
             self.mision_en_curso = False
 
-   
-    def finalizar_puerta(self):
-        if 0 <= self.indice_objetivo_actual < len(self.puertas_pendientes):
-            puerta_completada = self.puertas_pendientes.pop(self.indice_objetivo_actual)
-            self.puertas_visitadas.append(puerta_completada['punto'])
-            self.minimo_una_cruzada = True
-        
+    def finalizar_mision(self):
         self.mision_en_curso = False
         self.resetear_pid()
-        
         self.estado_mision = 'FIN_MISION'
         self.get_logger().info("--- INICIANDO ATERRIZAJE ---")
 
@@ -335,7 +300,7 @@ class NodoNavegacion(Node):
         
         self.enviar_comando_velocidad(lateral_cuerpo, avance_cuerpo, vz_mundo, rotacion)
         
-        return False
+        return (lateral_cuerpo, avance_cuerpo, vz_mundo, rotacion)
     
     def calcular_error_trayectoria(self, punto_objetivo):
         p_inicio = self.punto_inicio_segmento
@@ -403,15 +368,15 @@ class NodoNavegacion(Node):
             for p in self.ruta_global:
                 lista_datos.extend([float(p[0]), float(p[1]), float(p[2])])
             
-            if 0 <= self.indice_objetivo_actual < len(self.puertas_pendientes):
-                puerta = self.puertas_pendientes[self.indice_objetivo_actual]
-                c = puerta['punto']
-                lista_datos.extend([float(c[0]), float(c[1]), float(c[2]), float(puerta['angulo'])])
+            if self.plataforma_objetivo:
+                c = self.plataforma_objetivo['punto']
+                lista_datos.extend([float(c[0]), float(c[1]), float(c[2]), float(self.plataforma_objetivo['angulo'])])
             else:
                 lista_datos.extend([0.0, 0.0, 0.0, 0.0])
 
         msg.data = lista_datos
         self.pub_lista_puertas.publish(msg)
+
 def main(args=None):
     rclpy.init(args=args)
     nodo_navegacion = NodoNavegacion()
