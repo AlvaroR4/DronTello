@@ -7,24 +7,24 @@ from visualization_msgs.msg import Marker, MarkerArray
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 DISTANCIA_APROXIMACION_M = 0.4
-DISTANCIA_SALIDA_M = 0.4
-DISTANCIA_P_CONTROL_M = 0.5 #respecto P_aprox
-PUNTOS_RECTA = 20
+DISTANCIA_SALIDA_M = 0.6
+DISTANCIA_P_CONTROL_M = 0.6 #respecto P_aprox
+PUNTOS_RECTA = 25
 PUNTOS_CURVA = 20
-PUNTOS_ANTICIPACION = 6 #desactivado = 1
+PUNTOS_ANTICIPACION = 3 #desactivado = 1
 MARGEN_ALTURA_M = 0.0
 AUMENTAR_YAW = 4.0
-VELOCIDAD_AVANCE = 20
+VELOCIDAD_AVANCE = 25
 VELOCIDAD_MAXIMA = 40
 VELOCIDAD_MAXIMA_YAW = 10.0
 ERROR_YAW_DEG = 8.0
 DISTANCIA_NUEVA_PUERTA = 1.25 
-KP = 2.2
-KI = 1.5
+KP = 3.2
+KI = 2.0
 KD = 0.6
 KL_Y = 4.0
 KL_Z = 1.0
-KML = 0.4 #en funcion de esta se calcula Ka
+KML = 0.2 #en funcion de esta se calcula Ka
 MAX_INTEGRAL = 15.0
 
 def rango_velocidad(valor, maximo):
