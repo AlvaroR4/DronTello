@@ -5,6 +5,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 import torch
 import numpy as np
+import cv2
 import traceback
 
 CAMARA_TOPIC_ENTRADA = 'camera/image_raw'
@@ -84,13 +85,33 @@ class MidasPublisherNode(Node):
 
             depth_map = prediction.cpu().numpy().astype(np.float32)
 
-            # Publicar la profundidad como imagen 32FC1
-            img_msg_out = self.bridge.cv2_to_imgmsg(depth_map, encoding="32FC1")
-            img_msg_out.header.stamp = msg.header.stamp  # Copiar timestamp de la RGB
+            # 1. Usar percentiles en lugar de mínimos y máximos absolutos
+            # Ignoramos el 5% más lejano (cielo/fondo) y el 5% más cercano (muros/cámara)
+            profundidad_minima = np.percentile(depth_map, 5)
+            profundidad_maxima = np.percentile(depth_map, 95)
+
+            # 2. Recortar la matriz (clip) para que los valores extremos no se salgan del rango
+            depth_map_recortado = np.clip(depth_map, profundidad_minima, profundidad_maxima)
+
+            # 3. Normalizar los valores al rango [0.0, 1.0] con el nuevo rango ajustado
+            if profundidad_maxima - profundidad_minima > 0:
+                mapa_normalizado = (depth_map_recortado - profundidad_minima) / (profundidad_maxima - profundidad_minima)
+            else:
+                mapa_normalizado = depth_map_recortado
+
+            # 4. Escalar a [0, 255] y convertir a enteros de 8 bits
+            mapa_uint8 = (mapa_normalizado * 255.0).astype(np.uint8)
+
+            # 5. Aplicar el mapa de color
+            mapa_color_calido = cv2.applyColorMap(mapa_uint8, cv2.COLORMAP_JET)
+
+            # 6. Publicar como imagen en color estándar
+            img_msg_out = self.bridge.cv2_to_imgmsg(mapa_color_calido, encoding="bgr8")
+            img_msg_out.header.stamp = msg.header.stamp  
             img_msg_out.header.frame_id = msg.header.frame_id
             self.publisher_.publish(img_msg_out)
 
-            self.get_logger().info("Mapa de profundidad publicado (32FC1).", throttle_duration_sec=1.0)
+            self.get_logger().info("Mapa de profundidad publicado en color (bgr8).", throttle_duration_sec=1.0)
 
         except Exception as e_proc:
             self.get_logger().error(f"Error durante procesamiento MiDaS: {e_proc}")
